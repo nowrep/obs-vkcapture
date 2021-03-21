@@ -17,10 +17,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "vklayer.h"
+#include "utils.h"
 
-#include <stdbool.h>
 #include <pthread.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -125,19 +124,6 @@ struct vk_data {
 };
 
 // ------------------------------
-
-void
-os_socket_block(int s, bool block)
-{
-   int old = fcntl(s, F_GETFL, 0);
-   if (old == -1)
-      return;
-
-   if (block)
-      fcntl(s, F_SETFL, old & ~O_NONBLOCK);
-   else
-      fcntl(s, F_SETFL, old | O_NONBLOCK);
-}
 
 struct {
     int connfd;
