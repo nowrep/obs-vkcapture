@@ -1,0 +1,20 @@
+{
+    "file_format_version": "1.1.2",
+    "layer": {
+        "name": "VK_LAYER_OBS_vkcapture@LAYER_SUFFIX@",
+        "type": "GLOBAL",
+        "library_path": "libVkLayer_obs_vkcapture.so",
+        "api_version": "1.2.135",
+        "implementation_version": "1",
+        "description": "OBS Linux game capture",
+        "functions": {
+            "vkNegotiateLoaderLayerInterfaceVersion": "OBS_Negotiate"
+        },
+        "enable_environment": {
+            "OBS_VKCAPTURE": "1"
+        },
+        "disable_environment": {
+            "DISABLE_OBS_VKCAPTURE": "1"
+        }
+    }
+}

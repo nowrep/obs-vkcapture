@@ -9,6 +9,9 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(LibObs REQUIRED)
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
+find_package(Vulkan REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GBM REQUIRED gbm)
 
 configure_file(
     plugin-macros.h.in
@@ -21,10 +24,8 @@ set(PLUGIN_SOURCES
 add_library(${CMAKE_PROJECT_NAME} MODULE ${PLUGIN_SOURCES})
 
 include_directories(
-    "${LIBOBS_INCLUDE_DIR}/../UI/obs-frontend-api"
     ${CMAKE_BINARY_DIR}
-    ${Qt5Core_INCLUDES}
-    ${Qt5Widgets_INCLUDES}
+    ${GBM_INCLUDE_DIRS}
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
@@ -32,6 +33,13 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     Qt5::Core
     Qt5::Widgets
 )
+
+set(LAYER_SOURCES
+    src/vklayer.c
+)
+add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
+target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan ${GBM_LINK_LIBRARIES})
+configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture.json)
 
 include(GNUInstallDirs)
 
@@ -42,6 +50,9 @@ file(GLOB locale_files data/locale/*.ini)
 
 install(TARGETS ${CMAKE_PROJECT_NAME}
     LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/obs-plugins")
+
+install(FILES ${CMAKE_BINARY_DIR}/obs_vkcapture.json
+    DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/vulkan/implicit_layer.d")
 
 install(FILES ${locale_files}
     DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/obs/obs-plugins/${CMAKE_PROJECT_NAME}/locale")
