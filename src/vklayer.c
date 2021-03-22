@@ -28,9 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <gbm.h>
 #include <vulkan/vk_layer.h>
-#include <libdrm/drm_fourcc.h>
 
 // Based on obs-studio/plugins/win-capture/graphics-hook/vulkan-capture.c
 
@@ -61,12 +59,11 @@ struct vk_swap_data {
     VkExtent2D image_extent;
     VkFormat format;
     VkImage export_image;
-    bool layout_initialized;
     VkDeviceMemory export_mem;
+    VkSubresourceLayout export_layout;
     VkImage *swap_images;
     uint32_t image_count;
 
-    struct gbm_bo *bo;
     int dmabuf_fd;
     bool captured;
 };
@@ -118,9 +115,6 @@ struct vk_data {
 
     VkAllocationCallbacks ac_storage;
     const VkAllocationCallbacks *ac;
-
-    struct gbm_device *gbm_device;
-    int drm_fd;
 };
 
 // ------------------------------
@@ -198,9 +192,9 @@ static void capture_init_shtex(struct vk_swap_data *swap)
     td.width = swap->image_extent.width;
     td.height = swap->image_extent.height;
     td.fourcc = 0;
-    td.stride = gbm_bo_get_stride(swap->bo);
-    td.offset = gbm_bo_get_offset(swap->bo, 0);
-    td.modifiers = gbm_bo_get_modifier(swap->bo);
+    td.stride = swap->export_layout.rowPitch;
+    td.offset = swap->export_layout.offset;
+    td.modifiers = 0;
 
     struct msghdr msg = {0};
 
@@ -547,15 +541,13 @@ static void vk_shtex_free(struct vk_data *data)
             data->funcs.DestroyImage(device, swap->export_image,
                     data->ac);
 
-        if (swap->export_mem)
-            data->funcs.FreeMemory(device, swap->export_mem, NULL);
-
-        if (swap->bo) {
-            gbm_bo_destroy(swap->bo);
-            swap->bo = NULL;
+        if (swap->dmabuf_fd >= 0) {
             close(swap->dmabuf_fd);
             swap->dmabuf_fd = -1;
         }
+
+        if (swap->export_mem)
+            data->funcs.FreeMemory(device, swap->export_mem, NULL);
 
         swap->export_mem = VK_NULL_HANDLE;
         swap->export_image = VK_NULL_HANDLE;
@@ -566,13 +558,6 @@ static void vk_shtex_free(struct vk_data *data)
     }
 
     swap_walk_end(data);
-
-    if (data->gbm_device) {
-        gbm_device_destroy(data->gbm_device);
-        data->gbm_device = NULL;
-        close(data->drm_fd);
-        data->drm_fd = -1;
-    }
 
     data->cur_swap = NULL;
     capture_data.capturing = false;
@@ -638,57 +623,10 @@ static void remove_free_inst_data(VkInstance inst,
 /* ======================================================================== */
 /* capture                                                                  */
 
-static inline bool vk_shtex_init_gbm(struct vk_data *data)
-{
-    data->drm_fd = open("/dev/dri/renderD129", O_RDWR | O_CLOEXEC, 0);
-    if (data->drm_fd < 0) {
-        hlog("Failed to open render device");
-        return false;
-    }
-
-    data->gbm_device = gbm_create_device(data->drm_fd);
-    if (!data->gbm_device) {
-        hlog("Failed to create gbm device");
-        return false;
-    }
-
-    return true;
-}
-
 static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         struct vk_swap_data *swap)
 {
     struct vk_device_funcs *funcs = &data->funcs;
-
-    swap->bo = gbm_bo_create(data->gbm_device,
-            swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
-            GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
-    if (!swap->bo) {
-        hlog("Failed to create bo device");
-        return false;
-    }
-
-    if (gbm_bo_get_plane_count(swap->bo) != 1) {
-        hlog("Expected 1 plane, got %d", gbm_bo_get_plane_count(swap->bo));
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
-        return false;
-    }
-
-    int dmabuf_fd = gbm_bo_get_fd(swap->bo);
-    if (dmabuf_fd < 0) {
-        hlog("Failed to get dmabuf fd");
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
-        return false;
-    }
-
-    VkSubresourceLayout plane_layout = {};
-    plane_layout.offset = gbm_bo_get_offset(swap->bo, 0);
-    plane_layout.rowPitch = gbm_bo_get_stride_for_plane(swap->bo, 0);
-    plane_layout.arrayPitch = 0;
-    plane_layout.depthPitch = 0;
-    plane_layout.size = 0; // vulkan spec says must be 0
 
     // create image (for dedicated allocation)
     VkImageCreateInfo img_info = {};
@@ -699,24 +637,12 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.arrayLayers = 1;
     img_info.samples = VK_SAMPLE_COUNT_1_BIT;
     img_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    img_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img_info.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
     img_info.extent.width = swap->image_extent.width;
     img_info.extent.height = swap->image_extent.height;
     img_info.extent.depth = 1;
     img_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    img_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-
-    VkExternalMemoryImageCreateInfo eimg = {};
-    eimg.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-    eimg.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-    img_info.pNext = &eimg;
-
-    VkImageDrmFormatModifierExplicitCreateInfoEXT mod_info = {};
-    mod_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
-    mod_info.drmFormatModifierPlaneCount = 1;
-    mod_info.drmFormatModifier = gbm_bo_get_modifier(swap->bo);
-    mod_info.pPlaneLayouts = &plane_layout;
-    eimg.pNext = &mod_info;
+    img_info.tiling = VK_IMAGE_TILING_LINEAR;
 
     VkDevice device = data->device;
 
@@ -725,29 +651,14 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     if (VK_SUCCESS != res) {
         hlog("Failed to CreateImage %d", res);
         swap->export_image = VK_NULL_HANDLE;
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
-        close(dmabuf_fd);
         return false;
     }
 
-    swap->layout_initialized = false;
-
-    // import gbm bo memory (planes) and bind them to the image
-    struct VkMemoryFdPropertiesKHR fdp = {};
-    fdp.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
-    res = funcs->GetMemoryFdPropertiesKHR(device,
-            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-            dmabuf_fd, &fdp);
-    if (res != VK_SUCCESS) {
-        hlog("Failed to getMemoryFdPropertiesKHR %d", res);
-        funcs->DestroyImage(device, swap->export_image, data->ac);
-        swap->export_image = VK_NULL_HANDLE;
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
-        close(dmabuf_fd);
-        return false;
-    }
+    VkImageSubresource sbr = {};
+    sbr.mipLevel = 0;
+    sbr.arrayLayer = 0;
+    sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &swap->export_layout);
 
     VkImageMemoryRequirementsInfo2 memri = {};
     memri.image = swap->export_image;
@@ -772,7 +683,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     ifuncs->GetPhysicalDeviceMemoryProperties(data->phy_device, &pdmp);
 
     uint32_t mem_type_idx = 0;
-    uint32_t mem_req_bits = memr.memoryRequirements.memoryTypeBits & fdp.memoryTypeBits;
+    uint32_t mem_req_bits = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     for (; mem_type_idx < pdmp.memoryTypeCount; mem_type_idx++) {
         if ((memr.memoryRequirements.memoryTypeBits & (1 << mem_type_idx)) &&
                 (pdmp.memoryTypes[mem_type_idx].propertyFlags &
@@ -785,9 +696,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         hlog("failed to get memory type index");
         funcs->DestroyImage(device, swap->export_image, data->ac);
         swap->export_image = VK_NULL_HANDLE;
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
-        close(dmabuf_fd);
         return false;
     }
 
@@ -796,24 +704,10 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     memi.allocationSize = memr.memoryRequirements.size;
     memi.memoryTypeIndex = mem_type_idx;
 
-    VkImportMemoryFdInfoKHR importi = {};
-    importi.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
-    importi.fd = dmabuf_fd;
-    importi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-    memi.pNext = &importi;
-
-    VkMemoryDedicatedAllocateInfo dedi = {};
-    dedi.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
-    dedi.image = swap->export_image;
-    importi.pNext = &dedi;
-
     res = funcs->AllocateMemory(device, &memi, NULL, &swap->export_mem);
     if (VK_SUCCESS != res) {
         hlog("failed to AllocateMemory: %d", res);
         funcs->DestroyImage(device, swap->export_image, data->ac);
-        swap->export_image = VK_NULL_HANDLE;
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
         return false;
     }
 
@@ -827,23 +721,26 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         hlog("BindImageMemory2 failed %d", res);
         funcs->DestroyImage(device, swap->export_image, data->ac);
         swap->export_image = VK_NULL_HANDLE;
-        gbm_bo_destroy(swap->bo);
-        swap->bo = NULL;
-        close(dmabuf_fd);
         return false;
     }
 
-    // Get another fd to send over
-    swap->dmabuf_fd = gbm_bo_get_fd(swap->bo);
+    VkMemoryGetFdInfoKHR gfdi = {};
+    gfdi.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+    gfdi.memory = swap->export_mem;
+    gfdi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    res = funcs->GetMemoryFdKHR(device, &gfdi, &swap->dmabuf_fd);
+    if (VK_SUCCESS != res) {
+        hlog("GetMemoryFdKHR failed %d", res);
+        funcs->DestroyImage(device, swap->export_image, data->ac);
+        swap->export_image = VK_NULL_HANDLE;
+        return false;
+    }
 
     return true;
 }
 
 static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 {
-    if (!vk_shtex_init_gbm(data)) {
-        return false;
-    }
     if (!vk_shtex_init_vulkan_tex(data, swap)) {
         return false;
     }
@@ -1004,34 +901,6 @@ static void vk_shtex_capture(struct vk_data *data,
 #ifdef MORE_DEBUGGING
     hlog("BeginCommandBuffer %d", res);
 #endif
-
-    /* ------------------------------------------------------ */
-    /* transition shared texture if necessary                 */
-
-    if (!swap->layout_initialized) {
-        VkImageMemoryBarrier imb;
-        imb.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        imb.pNext = NULL;
-        imb.srcAccessMask = 0;
-        imb.dstAccessMask = 0;
-        imb.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        imb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imb.image = swap->export_image;
-        imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imb.subresourceRange.baseMipLevel = 0;
-        imb.subresourceRange.levelCount = 1;
-        imb.subresourceRange.baseArrayLayer = 0;
-        imb.subresourceRange.layerCount = 1;
-
-        funcs->CmdPipelineBarrier(cmd_buffer,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
-                0, NULL, 0, NULL, 1, &imb);
-
-        swap->layout_initialized = true;
-    }
 
     /* ------------------------------------------------------ */
     /* transition cur_backbuffer to transfer source state     */
@@ -1451,8 +1320,8 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(DestroyFence);
     GETADDR(WaitForFences);
     GETADDR(ResetFences);
-
-    GETADDR(GetMemoryFdPropertiesKHR);
+    GETADDR(GetImageSubresourceLayout);
+    GETADDR(GetMemoryFdKHR);
 
 #undef GETADDR
 
@@ -1508,8 +1377,6 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
 
     init_obj_list(&data->swaps);
     data->cur_swap = NULL;
-    data->gbm_device = NULL;
-    data->drm_fd = -1;
 
     data->valid = true;
 
@@ -1583,10 +1450,8 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
             swap_data->image_extent = cinfo->imageExtent;
             swap_data->format = cinfo->imageFormat;
             swap_data->export_image = VK_NULL_HANDLE;
-            swap_data->layout_initialized = false;
             swap_data->export_mem = VK_NULL_HANDLE;
             swap_data->image_count = count;
-            swap_data->bo = NULL;
             swap_data->dmabuf_fd = -1;
             swap_data->captured = false;
         }

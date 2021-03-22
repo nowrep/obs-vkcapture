@@ -60,7 +60,8 @@ struct vk_device_funcs {
     DEF_FUNC(DestroyFence);
     DEF_FUNC(WaitForFences);
     DEF_FUNC(ResetFences);
-    DEF_FUNC(GetMemoryFdPropertiesKHR);
+    DEF_FUNC(GetImageSubresourceLayout);
+    DEF_FUNC(GetMemoryFdKHR);
 };
 
 #undef DEF_FUNC

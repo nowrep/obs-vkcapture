@@ -10,8 +10,6 @@ set(CMAKE_AUTOUIC ON)
 find_package(LibObs REQUIRED)
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
 find_package(Vulkan REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GBM REQUIRED gbm)
 
 configure_file(
     plugin-macros.h.in
@@ -23,10 +21,7 @@ set(PLUGIN_SOURCES
 
 add_library(${CMAKE_PROJECT_NAME} MODULE ${PLUGIN_SOURCES})
 
-include_directories(
-    ${CMAKE_BINARY_DIR}
-    ${GBM_INCLUDE_DIRS}
-)
+include_directories(${CMAKE_BINARY_DIR})
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     libobs
@@ -38,7 +33,7 @@ set(LAYER_SOURCES
     src/vklayer.c
 )
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
-target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan ${GBM_LINK_LIBRARIES})
+target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture.json)
 
 include(GNUInstallDirs)
