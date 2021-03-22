@@ -49,21 +49,26 @@ typedef struct {
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
 
+static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
+{
+    if (ctx->clientfd) {
+        close(ctx->clientfd);
+        ctx->clientfd = -1;
+    }
+
+    if (ctx->texture) {
+        gs_texture_destroy(ctx->texture);
+        ctx->texture = NULL;
+        close(ctx->buf_fd);
+        ctx->buf_fd = -1;
+    }
+}
+
 static void vkcapture_source_destroy(void *data)
 {
     vkcapture_source_t *ctx = data;
 
-    if (ctx->texture) {
-        gs_texture_destroy(ctx->texture);
-    }
-
-    if (ctx->buf_fd >= 0) {
-        close(ctx->buf_fd);
-    }
-
-    if (ctx->clientfd >= 0) {
-        close(ctx->clientfd);
-    }
+    vkcapture_cleanup_client(ctx);
 
     if (ctx->sockfd >= 0) {
         close(ctx->sockfd);
@@ -77,8 +82,9 @@ static void vkcapture_source_destroy(void *data)
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 {
     vkcapture_source_t *ctx = bzalloc(sizeof(vkcapture_source_t));
-    ctx->buf_fd = -1;
     ctx->source = source;
+    ctx->buf_fd = -1;
+    ctx->clientfd = -1;
 
     unlink(socket_filename);
 
@@ -155,8 +161,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             }
         }
         if (n <= 0) {
-            close(ctx->clientfd);
-            ctx->clientfd = -1;
+            vkcapture_cleanup_client(ctx);
             return;
         }
 
@@ -179,7 +184,8 @@ static void vkcapture_source_video_tick(void *data, float seconds)
 
         ctx->buf_fd = *((int *)CMSG_DATA(cmsgh));
 
-        blog(LOG_INFO, "Creating texture from dmabuf %d %dx%d stride:%d offset:%d", ctx->buf_fd, ctx->data.width, ctx->data.height, ctx->data.stride, ctx->data.offset);
+        blog(LOG_INFO, "Creating texture from dmabuf %d %dx%d stride:%d offset:%d", ctx->buf_fd,
+                ctx->data.width, ctx->data.height, ctx->data.stride, ctx->data.offset);
 
         obs_enter_graphics();
         const uint32_t stride = ctx->data.stride;
