@@ -209,7 +209,7 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
 static const char *vkcapture_source_get_name(void *data)
 {
-    return "Game Capture (Vulkan)";
+    return obs_module_text("GameCapture");
 }
 
 static uint32_t vkcapture_source_get_width(void *data)
