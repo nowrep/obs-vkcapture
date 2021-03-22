@@ -10,10 +10,10 @@ find_package(Vulkan REQUIRED)
 
 option(BUILD_PLUGIN "Build OBS plugin" ON)
 
-if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
-    set(LAYER_SUFFIX "_64")
-else()
+if (${CMAKE_C_FLAGS} MATCHES "-m32")
     set(LAYER_SUFFIX "_32")
+else()
+    set(LAYER_SUFFIX "_64")
 endif()
 
 if (BUILD_PLUGIN)
@@ -38,5 +38,8 @@ target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 
 configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json)
 
-install(FILES ${CMAKE_BINARY_DIR}/obs_vkcapture.json
+install(TARGETS VkLayer_obs_vkcapture
+    LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}")
+
+install(FILES ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
     DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/vulkan/implicit_layer.d")
