@@ -17,8 +17,14 @@ set(LAYER_SOURCES src/vklayer.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 
+if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+    set(LAYER_SUFFIX "_64")
+else()
+    set(LAYER_SUFFIX "_32")
+endif()
+
 configure_file(plugin-macros.h.in ${CMAKE_BINARY_DIR}/plugin-macros.h)
-configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture.json)
+configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json)
 
 install(TARGETS linux-vkcapture
     LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/obs-plugins")
