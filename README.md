@@ -4,6 +4,8 @@ OBS plugin for Vulkan game capture on Linux.
 
 Requires OBS with EGL support (currently unreleased, you need to build from git).
 
+AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
+
 ## Building
 
     mkdir build && cd build
