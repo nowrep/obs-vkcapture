@@ -1169,8 +1169,6 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     GETADDR(DestroyInstance);
     GETADDR(GetPhysicalDeviceQueueFamilyProperties);
     GETADDR(GetPhysicalDeviceMemoryProperties);
-    GETADDR(GetPhysicalDeviceImageFormatProperties2);
-    GETADDR(EnumerateDeviceExtensionProperties);
 #undef GETADDR
 
     valid = valid && funcs_found;
@@ -1299,12 +1297,10 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(QueuePresentKHR);
     GETADDR(AllocateMemory);
     GETADDR(FreeMemory);
-    GETADDR(BindImageMemory);
     GETADDR(BindImageMemory2);
     GETADDR(GetSwapchainImagesKHR);
     GETADDR(CreateImage);
     GETADDR(DestroyImage);
-    GETADDR(GetImageMemoryRequirements);
     GETADDR(GetImageMemoryRequirements2);
     GETADDR(ResetCommandPool);
     GETADDR(BeginCommandBuffer);

@@ -27,8 +27,6 @@ struct vk_inst_funcs {
     DEF_FUNC(DestroyInstance);
     DEF_FUNC(GetPhysicalDeviceQueueFamilyProperties);
     DEF_FUNC(GetPhysicalDeviceMemoryProperties);
-    DEF_FUNC(GetPhysicalDeviceImageFormatProperties2);
-    DEF_FUNC(EnumerateDeviceExtensionProperties);
 };
 
 struct vk_device_funcs {
@@ -39,12 +37,10 @@ struct vk_device_funcs {
     DEF_FUNC(QueuePresentKHR);
     DEF_FUNC(AllocateMemory);
     DEF_FUNC(FreeMemory);
-    DEF_FUNC(BindImageMemory);
     DEF_FUNC(BindImageMemory2);
     DEF_FUNC(GetSwapchainImagesKHR);
     DEF_FUNC(CreateImage);
     DEF_FUNC(DestroyImage);
-    DEF_FUNC(GetImageMemoryRequirements);
     DEF_FUNC(GetImageMemoryRequirements2);
     DEF_FUNC(ResetCommandPool);
     DEF_FUNC(BeginCommandBuffer);
