@@ -22,8 +22,6 @@ if (BUILD_PLUGIN)
     target_link_libraries(linux-vkcapture libobs obs-frontend-api)
     set_target_properties(linux-vkcapture PROPERTIES PREFIX "")
 
-    configure_file(plugin-macros.h.in ${CMAKE_BINARY_DIR}/plugin-macros.h)
-
     install(TARGETS linux-vkcapture
         LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/obs-plugins")
 
@@ -36,6 +34,7 @@ set(LAYER_SOURCES src/vklayer.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 
+configure_file(plugin-macros.h.in ${CMAKE_BINARY_DIR}/plugin-macros.h)
 configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json)
 
 install(TARGETS VkLayer_obs_vkcapture
