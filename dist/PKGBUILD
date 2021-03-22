@@ -28,7 +28,6 @@ build() {
     export LDFLAGS="-m32 ${LDFLAGS}"
 
     cmake -B build32 -S "$_pkgbase" -DCMAKE_INSTALL_PREFIX=/usr \
-        -DCMAKE_INSTALL_PREFIX=/usr \
         -DCMAKE_INSTALL_LIBDIR=lib32 \
         -DCMAKE_INSTALL_DATADIR=/share \
         -DCMAKE_LIBRARY_PATH=/usr/lib32 \
