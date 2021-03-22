@@ -69,6 +69,8 @@ static void vkcapture_source_destroy(void *data)
         close(ctx->sockfd);
     }
 
+    unlink(socket_filename);
+
     bfree(data);
 }
 
@@ -78,11 +80,12 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
     ctx->buf_fd = -1;
     ctx->source = source;
 
+    unlink(socket_filename);
+
     struct sockaddr_un addr = {0};
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, socket_filename);
     ctx->sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    unlink(addr.sun_path);
 
     int ret = bind(ctx->sockfd, (const struct sockaddr *)&addr, sizeof(addr));
     if (ret < 0) {
