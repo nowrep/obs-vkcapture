@@ -134,6 +134,10 @@ static bool capture_try_connect()
 {
     const char *sockname = "/tmp/obs-vkcapture.sock";
 
+    if (access(sockname, R_OK) != 0) {
+        return false;
+    }
+
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, sockname);
