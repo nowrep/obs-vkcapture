@@ -186,19 +186,17 @@ static void capture_init_shtex(struct vk_swap_data *swap)
     struct msg_texture_data {
         int width;
         int height;
-        int fourcc;
+        int format;
         int stride;
         int offset;
-        uint64_t modifiers;
     };
 
     struct msg_texture_data td;
     td.width = swap->image_extent.width;
     td.height = swap->image_extent.height;
-    td.fourcc = 0;
+    td.format = swap->format;
     td.stride = swap->export_layout.rowPitch;
     td.offset = swap->export_layout.offset;
-    td.modifiers = 0;
 
     struct msghdr msg = {0};
 
