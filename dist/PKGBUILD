@@ -7,13 +7,13 @@ url='https://github.com/nowrep/obs-vkcapture'
 license=('GPL2')
 arch=('x86_64')
 depends=('vulkan-icd-loader' 'obs-studio-git')
-makedepends=('gcc' 'cmake' 'vulkan-headers')
+makedepends=('gcc' 'cmake' 'vulkan-headers' 'lib32-vulkan-icd-loader')
 source=("$_pkgbase::git+$url")
 sha512sums=('SKIP')
 
 pkgver() {
     cd "$_pkgbase"
-    git describe --tags | sed -r 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {
@@ -45,6 +45,7 @@ package_obs-vkcapture-git() {
 
 package_lib32-obs-vkcapture-git() {
     pkgdesc='OBS Linux Vulkan game capture (32-bit)'
+    depends=('lib32-vulkan-icd-loader')
     conflicts=('lib32-obs-vkcapture')
 
     make -C build32 DESTDIR="$pkgdir" install
