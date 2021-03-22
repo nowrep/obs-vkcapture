@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(obs-vkcapture VERSION 1.0.0)
+project(obs-vkcapture VERSION 0.1)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
