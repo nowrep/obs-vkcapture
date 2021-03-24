@@ -105,6 +105,7 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
         vkcapture_source_destroy(ctx);
         return NULL;
     }
+    os_socket_block(ctx->sockfd, false);
 
     UNUSED_PARAMETER(settings);
     return ctx;
@@ -115,26 +116,14 @@ static void vkcapture_source_video_tick(void *data, float seconds)
     vkcapture_source_t *ctx = data;
 
     if (ctx->clientfd < 0) {
-        struct timeval timeout;
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 0;
-
-        fd_set set;
-        FD_ZERO(&set);
-        FD_SET(ctx->sockfd, &set);
-        const int maxfd = ctx->sockfd;
-        const int nfds = select(maxfd + 1, &set, NULL, NULL, &timeout);
-        if (nfds < 0 || !FD_ISSET(ctx->sockfd, &set)) {
-            return;
-        }
-
         ctx->clientfd = accept(ctx->sockfd, NULL, NULL);
-        if (ctx->clientfd < 0) {
-            blog(LOG_ERROR, "Cannot accept unix socket: %d", errno);
-            return;
+        if (ctx->clientfd >= 0) {
+            os_socket_block(ctx->clientfd, false);
+        } else {
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
+                blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
+            }
         }
-
-        os_socket_block(ctx->clientfd, false);
     }
 
     if (ctx->clientfd >= 0) {
@@ -150,51 +139,50 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         msg.msg_control = cmsg_buf;
         msg.msg_controllen = sizeof(cmsg_buf);
 
-        const ssize_t n = recvmsg(ctx->clientfd, &msg, 0);
-        if (n == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        while (true) {
+            const ssize_t n = recvmsg(ctx->clientfd, &msg, 0);
+            if (n == -1) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    return;
+                }
+                if (errno != ECONNRESET) {
+                    blog(LOG_ERROR, "Socket recv error: %s", strerror(errno));
+                }
+            }
+            if (n <= 0) {
+                vkcapture_cleanup_client(ctx);
                 return;
             }
-            if (errno != ECONNRESET) {
-                blog(LOG_ERROR, "Socket recv error: %s", strerror(errno));
+            if (io.iov_len != sizeof(struct msg_texture_data)) {
+                return;
             }
-        }
-        if (n <= 0) {
-            vkcapture_cleanup_client(ctx);
-            return;
-        }
+            struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
+            if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
+                return;
+            }
 
-        if (io.iov_len != sizeof(struct msg_texture_data)) {
-            return;
-        }
+            if (ctx->texture) {
+                gs_texture_destroy(ctx->texture);
+            }
+            if (ctx->buf_fd >= 0) {
+                close(ctx->buf_fd);
+            }
 
-        struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
-        if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
-            return;
-        }
+            ctx->buf_fd = *((int *)CMSG_DATA(cmsgh));
 
-        if (ctx->texture) {
-            gs_texture_destroy(ctx->texture);
-        }
+            blog(LOG_INFO, "Creating texture from dmabuf %d %dx%d stride:%d offset:%d", ctx->buf_fd,
+                    ctx->data.width, ctx->data.height, ctx->data.stride, ctx->data.offset);
 
-        if (ctx->buf_fd >= 0) {
-            close(ctx->buf_fd);
-        }
+            obs_enter_graphics();
+            const uint32_t stride = ctx->data.stride;
+            const uint32_t offset = ctx->data.offset;
+            ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height, GS_BGRX,
+                    1, &ctx->buf_fd, &stride, &offset, NULL);
+            obs_leave_graphics();
 
-        ctx->buf_fd = *((int *)CMSG_DATA(cmsgh));
-
-        blog(LOG_INFO, "Creating texture from dmabuf %d %dx%d stride:%d offset:%d", ctx->buf_fd,
-                ctx->data.width, ctx->data.height, ctx->data.stride, ctx->data.offset);
-
-        obs_enter_graphics();
-        const uint32_t stride = ctx->data.stride;
-        const uint32_t offset = ctx->data.offset;
-        ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height, GS_BGRX,
-                1, &ctx->buf_fd, &stride, &offset, NULL);
-        obs_leave_graphics();
-
-        if (!ctx->texture) {
-            blog(LOG_ERROR, "Could not create texture from dmabuf source");
+            if (!ctx->texture) {
+                blog(LOG_ERROR, "Could not create texture from dmabuf source");
+            }
         }
     }
 
