@@ -176,8 +176,8 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             obs_enter_graphics();
             const uint32_t stride = ctx->data.stride;
             const uint32_t offset = ctx->data.offset;
-            ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height, GS_BGRX,
-                    1, &ctx->buf_fd, &stride, &offset, NULL);
+            ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height,
+                    ctx->data.format == -1 ? GS_RGBA : GS_BGRX, 1, &ctx->buf_fd, &stride, &offset, NULL);
             obs_leave_graphics();
 
             if (!ctx->texture) {
@@ -200,7 +200,7 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     gs_effect_set_texture(image, ctx->texture);
 
-    gs_draw_sprite(ctx->texture, 0, 0, 0);
+    gs_draw_sprite(ctx->texture, ctx->data.format == -1 ? GS_FLIP_V : 0, 0, 0);
 }
 
 static const char *vkcapture_source_get_name(void *data)
