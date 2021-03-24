@@ -17,18 +17,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "vklayer.h"
-#include "utils.h"
+#include "capture.h"
 #include "plugin-macros.h"
 
-#include <pthread.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
-
+#include <pthread.h>
 #include <vulkan/vk_layer.h>
 
 // Based on obs-studio/plugins/win-capture/graphics-hook/vulkan-capture.c
@@ -117,130 +110,6 @@ struct vk_data {
     VkAllocationCallbacks ac_storage;
     const VkAllocationCallbacks *ac;
 };
-
-// ------------------------------
-
-struct {
-    int connfd;
-    bool capturing;
-} capture_data;
-
-static void capture_init()
-{
-    capture_data.connfd = -1;
-    capture_data.capturing = false;
-}
-
-static bool capture_try_connect()
-{
-    const char *sockname = "/tmp/obs-vkcapture.sock";
-
-    if (access(sockname, R_OK) != 0) {
-        return false;
-    }
-
-    struct sockaddr_un addr;
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, sockname);
-    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
-    int ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
-    if (ret == -1) {
-        close(sock);
-        return false;
-    }
-
-    os_socket_block(sock, false);
-    capture_data.connfd = sock;
-    return true;
-}
-
-static void capture_update_socket()
-{
-    static int limiter = 0;
-    if (++limiter < 60) {
-        return;
-    }
-    limiter = 0;
-
-    if (capture_data.connfd < 0 && !capture_try_connect()) {
-        return;
-    }
-
-    char buf[1];
-    ssize_t n = recv(capture_data.connfd, buf, 1, 0);
-    if (n == -1) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return;
-        }
-        if (errno != ECONNRESET) {
-            hlog("Socket recv error: %s", strerror(errno));
-        }
-    }
-    if (n <= 0) {
-        close(capture_data.connfd);
-        capture_data.connfd = -1;
-    }
-}
-
-static void capture_init_shtex(struct vk_swap_data *swap)
-{
-    struct msg_texture_data {
-        int width;
-        int height;
-        int format;
-        int stride;
-        int offset;
-    };
-
-    struct msg_texture_data td;
-    td.width = swap->image_extent.width;
-    td.height = swap->image_extent.height;
-    td.format = swap->format;
-    td.stride = swap->export_layout.rowPitch;
-    td.offset = swap->export_layout.offset;
-
-    struct msghdr msg = {0};
-
-    struct iovec io = {
-        .iov_base = &td,
-        .iov_len = sizeof(struct msg_texture_data),
-    };
-    msg.msg_iov = &io;
-    msg.msg_iovlen = 1;
-
-    char cmsg_buf[CMSG_SPACE(sizeof(int))];
-    msg.msg_control = cmsg_buf;
-    msg.msg_controllen = CMSG_SPACE(sizeof(int));
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-    memcpy(CMSG_DATA(cmsg), &swap->dmabuf_fd, sizeof(int));
-
-    const ssize_t sent = sendmsg(capture_data.connfd, &msg, 0);
-
-    if (sent < 0) {
-        perror("cannot sendmsg");
-    }
-
-    swap->captured = true;
-    capture_data.capturing = true;
-}
-
-static bool capture_should_stop()
-{
-    return capture_data.capturing && capture_data.connfd < 0;
-}
-
-static bool capture_should_init()
-{
-    return !capture_data.capturing && capture_data.connfd >= 0;
-}
-
-static bool capture_ready()
-{
-    return capture_data.capturing;
-}
 
 /* ------------------------------------------------------------------------- */
 
@@ -563,7 +432,7 @@ static void vk_shtex_free(struct vk_data *data)
     swap_walk_end(data);
 
     data->cur_swap = NULL;
-    capture_data.capturing = false;
+    capture_stop();
 
     hlog("------------------- vulkan capture freed -------------------");
 }
@@ -750,10 +619,8 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 
     data->cur_swap = swap;
 
-    capture_init_shtex(swap);
-
-    if (!swap->captured)
-        return false;
+    capture_init_shtex(swap->image_extent.width, swap->image_extent.height, swap->format,
+        swap->export_layout.rowPitch, swap->export_layout.offset, swap->dmabuf_fd);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;
