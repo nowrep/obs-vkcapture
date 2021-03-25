@@ -61,5 +61,3 @@ struct vk_device_funcs {
 };
 
 #undef DEF_FUNC
-
-#define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)

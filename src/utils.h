@@ -33,3 +33,5 @@ static inline void os_socket_block(int s, bool block)
         fcntl(s, F_SETFL, old | O_NONBLOCK);
     }
 }
+
+#define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)

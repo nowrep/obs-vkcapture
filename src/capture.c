@@ -78,7 +78,7 @@ void capture_update_socket()
             return;
         }
         if (errno != ECONNRESET) {
-            perror("recv");
+            hlog("Socket recv error %s", strerror(errno));
         }
     }
     if (n <= 0) {
@@ -124,7 +124,7 @@ void capture_init_shtex(int width, int height, int format, int stride, int offse
 
     const ssize_t sent = sendmsg(data.connfd, &msg, 0);
     if (sent < 0) {
-        perror("sendmsg");
+        hlog("Socket sendmsg error %s", strerror(errno));
     }
 
     data.capturing = true;

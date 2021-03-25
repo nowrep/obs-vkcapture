@@ -19,10 +19,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "vklayer.h"
 #include "capture.h"
 #include "plugin-macros.h"
+#include "utils.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #include <pthread.h>
 #include <vulkan/vk_layer.h>
+
+#define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)
 
 // Based on obs-studio/plugins/win-capture/graphics-hook/vulkan-capture.c
 
