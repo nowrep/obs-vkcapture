@@ -56,7 +56,9 @@ static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
     }
 
     if (ctx->texture) {
+        obs_enter_graphics();
         gs_texture_destroy(ctx->texture);
+        obs_leave_graphics();
         ctx->texture = NULL;
         close(ctx->buf_fd);
         ctx->buf_fd = -1;
@@ -75,7 +77,7 @@ static void vkcapture_source_destroy(void *data)
 
     unlink(socket_filename);
 
-    bfree(data);
+    bfree(ctx);
 }
 
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
@@ -162,7 +164,9 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             }
 
             if (ctx->texture) {
+                obs_enter_graphics();
                 gs_texture_destroy(ctx->texture);
+                obs_leave_graphics();
             }
             if (ctx->buf_fd >= 0) {
                 close(ctx->buf_fd);
