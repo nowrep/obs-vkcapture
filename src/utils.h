@@ -1,5 +1,5 @@
 /*
-OBS Linux Vulkan game capture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdbool.h>
 
 static inline void os_socket_block(int s, bool block)

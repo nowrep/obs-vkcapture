@@ -30,7 +30,7 @@ if (BUILD_PLUGIN)
         DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/obs/obs-plugins/linux-vkcapture/locale")
 endif()
 
-set(LAYER_SOURCES src/vklayer.c src/capture.c)
+set(LAYER_SOURCES src/vklayer.c src/capture.c src/glinject.c src/glad/glad.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 
