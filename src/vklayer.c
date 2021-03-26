@@ -658,7 +658,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
 
         VkResult res = data->funcs.CreateCommandPool(
                 device, &cpci, data->ac, &frame_data->cmd_pool);
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
         hlog("CreateCommandPool %d", res);
 #endif
 
@@ -671,7 +671,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
 
         res = data->funcs.AllocateCommandBuffers(
                 device, &cbai, &frame_data->cmd_buffer);
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
         hlog("AllocateCommandBuffers %d", res);
 #endif
         GET_LDT(frame_data->cmd_buffer) = GET_LDT(device);
@@ -682,7 +682,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
         fci.flags = 0;
         res = data->funcs.CreateFence(device, &fci, data->ac,
                &frame_data->fence);
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
         hlog("CreateFence %d", res);
 #endif
     }
@@ -767,14 +767,14 @@ static void vk_shtex_capture(struct vk_data *data,
 
     res = funcs->ResetCommandPool(device, frame_data->cmd_pool, 0);
 
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
     hlog("ResetCommandPool %d", res);
 #endif
 
     const VkCommandBuffer cmd_buffer = frame_data->cmd_buffer;
     res = funcs->BeginCommandBuffer(cmd_buffer, &begin_info);
 
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
     hlog("BeginCommandBuffer %d", res);
 #endif
 
@@ -886,7 +886,7 @@ static void vk_shtex_capture(struct vk_data *data,
     const VkFence fence = frame_data->fence;
     res = funcs->QueueSubmit(queue, 1, &submit_info, fence);
 
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
     hlog("QueueSubmit %d", res);
 #endif
 
@@ -956,6 +956,10 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
         const VkAllocationCallbacks *ac,
         VkInstance *p_inst)
 {
+#ifndef NDEBUG
+    hlog("CreateInstance");
+#endif
+
     VkInstanceCreateInfo info = *cinfo;
 
     /* -------------------------------------------------------- */
@@ -1012,6 +1016,9 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     PFN_vkCreateInstance create = (PFN_vkCreateInstance)gpa(NULL, "vkCreateInstance");
 
     VkResult res = create(&info, ac, p_inst);
+#ifndef NDEBUG
+    hlog("CreateInstance %d", res);
+#endif
     bool valid = res == VK_SUCCESS;
     if (!valid) {
         /* try again with original arguments */
@@ -1056,6 +1063,10 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
 static void VKAPI_CALL OBS_DestroyInstance(VkInstance instance,
         const VkAllocationCallbacks *ac)
 {
+#ifndef NDEBUG
+    hlog("DestroyInstance");
+#endif
+
     struct vk_inst_funcs *ifuncs = get_inst_funcs(instance);
     PFN_vkDestroyInstance destroy_instance = ifuncs->DestroyInstance;
 
@@ -1075,6 +1086,10 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
         const VkAllocationCallbacks *ac,
         VkDevice *p_device)
 {
+#ifndef NDEBUG
+    hlog("CreateDevice");
+#endif
+
     struct vk_inst_data *idata =
         get_inst_data_by_physical_device(phy_device);
     struct vk_inst_funcs *ifuncs = &idata->funcs;
@@ -1139,6 +1154,9 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
         (PFN_vkCreateDevice)gipa(idata->instance, "vkCreateDevice");
 
     ret = createFunc(phy_device, info, ac, p_device);
+#ifndef NDEBUG
+    hlog("CreateDevice %d", ret);
+#endif
     if (ret != VK_SUCCESS) {
         vk_free(ac, data);
         return ret;
@@ -1258,6 +1276,10 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
 static void VKAPI_CALL OBS_DestroyDevice(VkDevice device,
         const VkAllocationCallbacks *ac)
 {
+#ifndef NDEBUG
+    hlog("DestroyDevice");
+#endif
+
     struct vk_data *data = remove_device_data(device);
 
     if (data->valid) {
@@ -1293,7 +1315,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
     VkSwapchainCreateInfoKHR info = *cinfo;
     info.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     VkResult res = funcs->CreateSwapchainKHR(device, &info, ac, p_sc);
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
     hlog("CreateSwapchainKHR %d", res);
 #endif
     if (res != VK_SUCCESS) {
@@ -1304,7 +1326,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
     VkSwapchainKHR sc = *p_sc;
     uint32_t count = 0;
     res = funcs->GetSwapchainImagesKHR(device, sc, &count, NULL);
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
     hlog("GetSwapchainImagesKHR %d", res);
 #endif
     if ((res == VK_SUCCESS) && (count > 0)) {
@@ -1316,7 +1338,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
             res = funcs->GetSwapchainImagesKHR(
                     device, sc, &count, swap_data->swap_images);
-#ifdef MORE_DEBUGGING
+#ifndef NDEBUG
             hlog("GetSwapchainImagesKHR %d", res);
 #endif
             swap_data->image_extent = cinfo->imageExtent;
@@ -1336,6 +1358,10 @@ static void VKAPI_CALL OBS_DestroySwapchainKHR(VkDevice device,
         VkSwapchainKHR sc,
         const VkAllocationCallbacks *ac)
 {
+#ifndef NDEBUG
+    hlog("DestroySwapchainKHR");
+#endif
+
     struct vk_data *data = get_device_data(device);
     struct vk_device_funcs *funcs = &data->funcs;
     PFN_vkDestroySwapchainKHR destroy_swapchain =
