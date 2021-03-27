@@ -39,3 +39,67 @@ struct egl_funcs {
 
     bool valid;
 };
+
+#define P_GLX_WIDTH 0x801D
+#define P_GLX_HEIGHT 0x801E
+#define P_GLX_BIND_TO_TEXTURE_RGBA_EXT 0x20D1
+#define P_GLX_DRAWABLE_TYPE 0x8010
+#define P_GLX_PIXMAP_BIT 0x00000002
+#define P_GLX_BIND_TO_TEXTURE_TARGETS_EXT 0x20D3
+#define P_GLX_TEXTURE_2D_BIT_EXT 0x00000002
+#define P_GLX_DOUBLEBUFFER 5
+#define P_GLX_Y_INVERTED_EXT 0x20D4
+#define P_GLX_TEXTURE_TARGET_EXT 0x20D6
+#define P_GLX_TEXTURE_2D_EXT 0x20DC
+#define P_GLX_TEXTURE_FORMAT_EXT 0x20D5
+#define P_GLX_TEXTURE_FORMAT_RGBA_EXT 0x20DA
+#define P_GLX_FRONT_LEFT_EXT 0x20DE
+#define P_GLX_RED_SIZE 8
+#define P_GLX_GREEN_SIZE 9
+#define P_GLX_BLUE_SIZE 10
+#define P_GLX_ALPHA_SIZE 11
+#define P_GLX_MIPMAP_TEXTURE_EXT 0x20D7
+
+#include <X11/Xlib.h>
+
+struct glx_funcs {
+    void *(*GetProcAddress)(const char*);
+    void *(*GetProcAddressARB)(const char*);
+    void (*DestroyContext)(void *display, void *context);
+    void (*SwapBuffers)(void *display, void *drawable);
+    int64_t (*SwapBuffersMscOML)(void *display, void *drawable, int64_t target_msc, int64_t divisor, int64_t remainder);
+    void *(*CreatePixmap)(void *display, void *config, unsigned long pixmap, const int *attribList);
+    void (*DestroyPixmap)(void *display, void *pixmap);
+    void *(*ChooseFBConfig)(void *display, int screen, const int *attribList, int *nitems);
+    void (*BindTexImageEXT)(void *display, void *drawable, int buffer, const int *attribList);
+    void (*QueryDrawable)(void *display, void *drawable, int attribute, unsigned *value);
+    void *(*ChooseVisual)(void *display, int screen, int *attribList);
+
+    bool valid;
+};
+
+typedef struct P_xcb_dri3_buffer_from_pixmap_reply_t {
+    uint8_t  response_type;
+    uint8_t  nfd;
+    uint16_t sequence;
+    uint32_t length;
+    uint32_t size;
+    uint16_t width;
+    uint16_t height;
+    uint16_t stride;
+    uint8_t  depth;
+    uint8_t  bpp;
+    uint8_t  pad0[12];
+} P_xcb_dri3_buffer_from_pixmap_reply_t;
+
+struct x11_funcs {
+    unsigned long (*XCreatePixmap)(void *display, unsigned long drawable, unsigned width, unsigned height, unsigned depth);
+    int (*XFreePixmap)(void *display, unsigned long pixmap);
+
+    void *(*xcb_connect)(const char *displayname, int *screenp);
+    void *(*xcb_dri3_buffer_from_pixmap)(void *c, unsigned long pixmap);
+    P_xcb_dri3_buffer_from_pixmap_reply_t *(*xcb_dri3_buffer_from_pixmap_reply)(void *c, void *cookie, void *error);
+    int *(*xcb_dri3_buffer_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffer_from_pixmap_reply_t *reply);
+
+    bool valid;
+};
