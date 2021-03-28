@@ -39,7 +39,6 @@ add_library(obs_glcapture MODULE ${GL_SOURCES})
 
 configure_file(plugin-macros.h.in ${CMAKE_BINARY_DIR}/plugin-macros.h @ONLY)
 configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json @ONLY)
-configure_file(src/obs-glcapture.in ${CMAKE_BINARY_DIR}/obs-glcapture @ONLY)
 
 install(TARGETS VkLayer_obs_vkcapture
     LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}")
@@ -50,8 +49,8 @@ install(TARGETS obs_glcapture
 install(FILES ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
     DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/vulkan/implicit_layer.d")
 
-install(FILES ${CMAKE_BINARY_DIR}/obs-vkcapture
+install(FILES src/obs-vkcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
 
-install(FILES ${CMAKE_BINARY_DIR}/obs-glcapture
+install(FILES src/obs-glcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
