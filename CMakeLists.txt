@@ -30,14 +30,20 @@ if (BUILD_PLUGIN)
         DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/obs/obs-plugins/linux-vkcapture/locale")
 endif()
 
-set(LAYER_SOURCES src/vklayer.c src/capture.c src/glinject.c src/glad/glad.c)
+set(LAYER_SOURCES src/vklayer.c src/capture.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
+
+set(GL_SOURCES src/glinject.c src/glad/glad.c src/capture.c)
+add_library(obs_glcapture MODULE ${GL_SOURCES})
 
 configure_file(plugin-macros.h.in ${CMAKE_BINARY_DIR}/plugin-macros.h)
 configure_file(src/obs_vkcapture.json.in ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json)
 
 install(TARGETS VkLayer_obs_vkcapture
+    LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}")
+
+install(TARGETS obs_glcapture
     LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}")
 
 install(FILES ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
