@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if [ "$#" -eq 0 ]; then
+    programname=`basename "$0"`
+    echo "ERROR: No program supplied"
+    echo
+    echo "Usage: $programname <program>"
+    exit 1
+fi
+
+exec env OBS_VKCAPTURE=1 "$@"

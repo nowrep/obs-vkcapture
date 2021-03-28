@@ -50,5 +50,8 @@ install(TARGETS obs_glcapture
 install(FILES ${CMAKE_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
     DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/vulkan/implicit_layer.d")
 
+install(FILES ${CMAKE_BINARY_DIR}/obs-vkcapture
+    DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
+
 install(FILES ${CMAKE_BINARY_DIR}/obs-glcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
