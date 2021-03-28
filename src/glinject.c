@@ -347,7 +347,8 @@ static bool gl_init(void *display, void *surface)
         return false;
     }
 
-    capture_init_shtex(data.width, data.height, -1, data.buf_stride, data.buf_offset, data.buf_fd);
+    capture_init_shtex(data.width, data.height, data.glx ? CAPTURE_FORMAT_BGRA : CAPTURE_FORMAT_RGBA,
+            data.buf_stride, data.buf_offset, /*flip*/true, data.buf_fd);
 
     hlog("------------------ opengl capture started ------------------");
 

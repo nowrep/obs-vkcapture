@@ -1,5 +1,5 @@
 /*
-OBS Linux Vulkan game capture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -20,9 +20,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <stdbool.h>
 
+enum capture_format {
+    CAPTURE_FORMAT_RGBA,
+    CAPTURE_FORMAT_BGRA,
+    CAPTURE_FORMAT_BGRX
+};
+
+struct capture_texture_data {
+    int width;
+    int height;
+    int format;
+    int stride;
+    int offset;
+    bool flip;
+};
+
 void capture_init();
 void capture_update_socket();
-void capture_init_shtex(int width, int height, int format, int stride, int offset, int fd);
+void capture_init_shtex(int width, int height, int format, int stride, int offset, bool flip, int fd);
 void capture_stop();
 
 bool capture_should_stop();

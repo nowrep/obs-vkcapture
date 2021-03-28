@@ -1,5 +1,5 @@
 /*
-OBS Linux Vulkan game capture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -625,8 +625,8 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 
     data->cur_swap = swap;
 
-    capture_init_shtex(swap->image_extent.width, swap->image_extent.height, swap->format,
-        swap->export_layout.rowPitch, swap->export_layout.offset, swap->dmabuf_fd);
+    capture_init_shtex(swap->image_extent.width, swap->image_extent.height, CAPTURE_FORMAT_BGRX,
+        swap->export_layout.rowPitch, swap->export_layout.offset, /*flip*/false, swap->dmabuf_fd);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;

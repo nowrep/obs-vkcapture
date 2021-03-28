@@ -1,5 +1,5 @@
 /*
-OBS Linux Vulkan game capture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -26,27 +26,35 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <sys/socket.h>
 
 #include "utils.h"
+#include "capture.h"
 #include "plugin-macros.h"
-
-struct msg_texture_data {
-    int width;
-    int height;
-    int format;
-    int stride;
-    int offset;
-};
 
 typedef struct {
     obs_source_t *source;
     gs_texture_t *texture;
 
-    struct msg_texture_data data;
+    struct capture_texture_data data;
     int buf_fd;
     int sockfd;
     int clientfd;
 } vkcapture_source_t;
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
+
+static enum gs_color_format format_to_gs(enum capture_format format)
+{
+    switch (format) {
+    case CAPTURE_FORMAT_RGBA:
+        return GS_RGBA;
+    case CAPTURE_FORMAT_BGRA:
+        return GS_BGRA;
+    case CAPTURE_FORMAT_BGRX:
+        return GS_BGRX;
+    default:
+        blog(LOG_ERROR, "Unknown capture format %d", format);
+        return GS_UNKNOWN;
+    }
+}
 
 static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
 {
@@ -132,7 +140,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         struct msghdr msg = {0};
         struct iovec io = {
             .iov_base = &ctx->data,
-            .iov_len = sizeof(struct msg_texture_data),
+            .iov_len = sizeof(struct capture_texture_data),
         };
         msg.msg_iov = &io;
         msg.msg_iovlen = 1;
@@ -155,7 +163,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 vkcapture_cleanup_client(ctx);
                 return;
             }
-            if (io.iov_len != sizeof(struct msg_texture_data)) {
+            if (io.iov_len != sizeof(struct capture_texture_data)) {
                 return;
             }
             struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
@@ -181,7 +189,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             const uint32_t stride = ctx->data.stride;
             const uint32_t offset = ctx->data.offset;
             ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height,
-                    ctx->data.format == -1 ? GS_RGBA : GS_BGRX, 1, &ctx->buf_fd, &stride, &offset, NULL);
+                    format_to_gs(ctx->data.format), 1, &ctx->buf_fd, &stride, &offset, NULL);
             obs_leave_graphics();
 
             if (!ctx->texture) {
@@ -204,7 +212,7 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     gs_effect_set_texture(image, ctx->texture);
 
-    gs_draw_sprite(ctx->texture, ctx->data.format == -1 ? GS_FLIP_V : 0, 0, 0);
+    gs_draw_sprite(ctx->texture, ctx->data.flip ? GS_FLIP_V : 0, 0, 0);
 }
 
 static const char *vkcapture_source_get_name(void *data)

@@ -1,5 +1,5 @@
 /*
-OBS Linux Vulkan game capture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -87,28 +87,21 @@ void capture_update_socket()
     }
 }
 
-void capture_init_shtex(int width, int height, int format, int stride, int offset, int fd)
+void capture_init_shtex(int width, int height, int format, int stride, int offset, bool flip, int fd)
 {
-    struct msg_texture_data {
-        int width;
-        int height;
-        int format;
-        int stride;
-        int offset;
-    };
-
-    struct msg_texture_data td;
+    struct capture_texture_data td;
     td.width = width;
     td.height = height;
     td.format = format;
     td.stride = stride;
     td.offset = offset;
+    td.flip = flip;
 
     struct msghdr msg = {0};
 
     struct iovec io = {
         .iov_base = &td,
-        .iov_len = sizeof(struct msg_texture_data),
+        .iov_len = sizeof(struct capture_texture_data),
     };
     msg.msg_iov = &io;
     msg.msg_iovlen = 1;
