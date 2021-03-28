@@ -124,6 +124,7 @@ static bool gl_init_funcs(bool glx)
         }
         GETXADDR(XCreatePixmap);
         GETXADDR(XFreePixmap);
+        GETXADDR(XFree);
 
         handle = dlopen("libxcb.so.1", RTLD_LAZY);
         if (!handle) {
@@ -131,6 +132,7 @@ static bool gl_init_funcs(bool glx)
             return false;
         }
         GETXADDR(xcb_connect);
+        GETXADDR(xcb_disconnect);
 
         handle = dlopen("libxcb-dri3.so.0", RTLD_LAZY);
         if (!handle) {
@@ -148,7 +150,6 @@ static bool gl_init_funcs(bool glx)
             return false;
         }
         GETEGLADDR(GetProcAddress);
-        GETEGLADDR(CreateContext);
         GETEGLADDR(DestroyContext);
         GETEGLADDR(GetCurrentContext);
         GETEGLADDR(CreateImage);
@@ -215,6 +216,11 @@ static void gl_free()
         data.fbo = 0;
     }
 
+    if (data.xcb_con) {
+        x11_f.xcb_disconnect(data.xcb_con);
+        data.xcb_con = NULL;
+    }
+
     capture_stop();
 
     hlog("------------------- opengl capture freed -------------------");
@@ -259,10 +265,7 @@ static bool gl_shtex_init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     if (data.glx) {
-        if (!data.xcb_con) {
-            data.xcb_con = x11_f.xcb_connect(NULL, NULL);
-        }
-
+        data.xcb_con = x11_f.xcb_connect(NULL, NULL);
         Window root = DefaultRootWindow(data.display);
         data.xpixmap = x11_f.XCreatePixmap(data.display, root, data.width, data.height, 24);
 
@@ -292,6 +295,8 @@ static bool gl_shtex_init()
             0
         };
         data.glxpixmap = glx_f.CreatePixmap(data.display, fbc[0], data.xpixmap, pixmapAttribs);
+        x11_f.XFree(fbc);
+
         glx_f.BindTexImageEXT(data.display, data.glxpixmap, P_GLX_FRONT_LEFT_EXT, NULL);
 
         void *cookie = x11_f.xcb_dri3_buffer_from_pixmap(data.xcb_con, data.xpixmap);

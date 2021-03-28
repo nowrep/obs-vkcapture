@@ -27,7 +27,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 struct egl_funcs {
     void *(*GetProcAddress)(const char*);
-    void *(*CreateContext)(void *display, void *config, void *share_context, const intptr_t *attrib_list);
     unsigned (*DestroyContext)(void *display, void *context);
     void *(*GetCurrentContext)();
     void *(*CreateImage)(void *display, void *context, unsigned target, intptr_t buffer, const intptr_t *attrib_list);
@@ -95,8 +94,10 @@ typedef struct P_xcb_dri3_buffer_from_pixmap_reply_t {
 struct x11_funcs {
     unsigned long (*XCreatePixmap)(void *display, unsigned long drawable, unsigned width, unsigned height, unsigned depth);
     int (*XFreePixmap)(void *display, unsigned long pixmap);
+    int (*XFree)(void *data);
 
     void *(*xcb_connect)(const char *displayname, int *screenp);
+    void (*xcb_disconnect)(void *c);
     void *(*xcb_dri3_buffer_from_pixmap)(void *c, unsigned long pixmap);
     P_xcb_dri3_buffer_from_pixmap_reply_t *(*xcb_dri3_buffer_from_pixmap_reply)(void *c, void *cookie, void *error);
     int *(*xcb_dri3_buffer_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffer_from_pixmap_reply_t *reply);
