@@ -49,4 +49,5 @@ package_lib32-obs-vkcapture-git() {
     conflicts=('lib32-obs-vkcapture')
 
     make -C build32 DESTDIR="$pkgdir" install
+    rm -r "$pkgdir/usr/bin"
 }
