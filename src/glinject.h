@@ -59,8 +59,6 @@ struct egl_funcs {
 #define P_GLX_ALPHA_SIZE 11
 #define P_GLX_MIPMAP_TEXTURE_EXT 0x20D7
 
-#include <X11/Xlib.h>
-
 struct glx_funcs {
     void *(*GetProcAddress)(const char*);
     void *(*GetProcAddressARB)(const char*);
@@ -76,6 +74,56 @@ struct glx_funcs {
 
     bool valid;
 };
+
+#define P_DefaultRootWindow(dpy) (P_ScreenOfDisplay(dpy,P_DefaultScreen(dpy))->root)
+#define P_ScreenOfDisplay(dpy, scr) (&((P_XPrivDisplay)(dpy))->screens[scr])
+#define P_DefaultScreen(dpy) (((P_XPrivDisplay)(dpy))->default_screen)
+
+typedef struct {
+    void *ext_data;
+    void *display;
+    unsigned long root;
+} P_Screen;
+
+typedef struct
+{
+    void *ext_data;
+    void *private1;
+    int fd;
+    int private2;
+    int proto_major_version;
+    int proto_minor_version;
+    char *vendor;
+    unsigned long private3;
+    unsigned long private4;
+    unsigned long private5;
+    int private6;
+    void *resource_alloc;
+    int byte_order;
+    int bitmap_unit;
+    int bitmap_pad;
+    int bitmap_bit_order;
+    int nformats;
+    void *pixmap_format;
+    int private8;
+    int release;
+    void *private9, *private10;
+    int qlen;
+    unsigned long last_request_read;
+    unsigned long request;
+    char *private11;
+    char *private12;
+    char *private13;
+    char *private14;
+    unsigned max_request_size;
+    void *db;
+    void *private15;
+    char *display_name;
+    int default_screen;
+    int nscreens;
+    P_Screen *screens;
+}
+*P_XPrivDisplay;
 
 typedef struct P_xcb_dri3_buffer_from_pixmap_reply_t {
     uint8_t  response_type;

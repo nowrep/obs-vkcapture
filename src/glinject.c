@@ -48,7 +48,7 @@ struct gl_data {
 
     bool glx;
     void *xcb_con;
-    Pixmap xpixmap;
+    unsigned long xpixmap;
     void *glxpixmap;
 };
 static struct gl_data data;
@@ -266,7 +266,7 @@ static bool gl_shtex_init()
 
     if (data.glx) {
         data.xcb_con = x11_f.xcb_connect(NULL, NULL);
-        Window root = DefaultRootWindow(data.display);
+        unsigned long root = P_DefaultRootWindow(data.display);
         data.xpixmap = x11_f.XCreatePixmap(data.display, root, data.width, data.height, 24);
 
         const int pixmap_config[] = {
@@ -282,7 +282,7 @@ static bool gl_shtex_init()
             0
         };
         int nelements;
-        void **fbc = glx_f.ChooseFBConfig(data.display, DefaultScreen(data.display), pixmap_config, &nelements);
+        void **fbc = glx_f.ChooseFBConfig(data.display, P_DefaultScreen(data.display), pixmap_config, &nelements);
         if (nelements <= 0) {
             hlog("Failed to choose FBConfig");
             return false;
