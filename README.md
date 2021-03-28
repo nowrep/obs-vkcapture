@@ -1,6 +1,6 @@
-# OBS Linux Vulkan game capture
+# OBS Linux Vulkan/OpenGL game capture
 
-OBS plugin for Vulkan game capture on Linux.
+OBS plugin for Vulkan/OpenGL game capture on Linux.
 
 Requires OBS with EGL support (currently unreleased, you need to build from git).  
 On X11 you need to explicitly enable EGL: `OBS_USE_EGL=1 obs`.
@@ -15,11 +15,15 @@ AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
 ## Usage
 
-1. Add `Game Capture (Vulkan)` to your OBS scene.
-2. Start the game with `OBS_VKCAPTURE=1` environment variable set.
+1. Add `Game Capture` to your OBS scene.
+2. Start the game with capture enabled
 
-Example:
+### Vulkan
 
-    OBS_VKCAPTURE=1 game
+    obs-vkcapture game
+
+### OpenGL
+
+    obs-glcapture game
 
 Only supports capturing one game at a time.
