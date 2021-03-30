@@ -312,6 +312,7 @@ static bool gl_shtex_init()
         }
         data.buf_fd = x11_f.xcb_dri3_buffer_from_pixmap_reply_fds(data.xcb_con, reply)[0];
         data.buf_stride = reply->stride;
+        data.buf_fourcc = DRM_FORMAT_XRGB8888;
         free(reply);
     } else {
         data.image = egl_f.CreateImage(data.display, egl_f.GetCurrentContext(), P_EGL_GL_TEXTURE_2D, data.texture, NULL);
@@ -352,7 +353,7 @@ static bool gl_init(void *display, void *surface)
         return false;
     }
 
-    capture_init_shtex(data.width, data.height, data.glx ? CAPTURE_FORMAT_BGRA : CAPTURE_FORMAT_RGBA,
+    capture_init_shtex(data.width, data.height, data.buf_fourcc,
             data.buf_stride, data.buf_offset, /*flip*/true, data.buf_fd);
 
     hlog("------------------ opengl capture started ------------------");

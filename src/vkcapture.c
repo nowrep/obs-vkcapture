@@ -41,21 +41,6 @@ typedef struct {
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
 
-static enum gs_color_format format_to_gs(enum capture_format format)
-{
-    switch (format) {
-    case CAPTURE_FORMAT_RGBA:
-        return GS_RGBA;
-    case CAPTURE_FORMAT_BGRA:
-        return GS_BGRA;
-    case CAPTURE_FORMAT_BGRX:
-        return GS_BGRX;
-    default:
-        blog(LOG_ERROR, "Unknown capture format %d", format);
-        return GS_UNKNOWN;
-    }
-}
-
 static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
 {
     if (ctx->clientfd) {
@@ -189,7 +174,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             const uint32_t stride = ctx->data.stride;
             const uint32_t offset = ctx->data.offset;
             ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height,
-                    format_to_gs(ctx->data.format), 1, &ctx->buf_fd, &stride, &offset, NULL);
+                    ctx->data.format, GS_BGRX, 1, &ctx->buf_fd, &stride, &offset, NULL);
             obs_leave_graphics();
 
             if (!ctx->texture) {

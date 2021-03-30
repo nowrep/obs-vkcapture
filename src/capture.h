@@ -20,11 +20,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <stdbool.h>
 
-enum capture_format {
-    CAPTURE_FORMAT_RGBA,
-    CAPTURE_FORMAT_BGRA,
-    CAPTURE_FORMAT_BGRX
-};
+#ifndef DRM_FORMAT_BGRX8888
+#define fourcc_code(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | \
+        ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
+#define DRM_FORMAT_BGRX8888 fourcc_code('B', 'X', '2', '4')
+#define DRM_FORMAT_XRGB8888 fourcc_code('X', 'R', '2', '4')
+#endif
 
 struct capture_texture_data {
     int width;
