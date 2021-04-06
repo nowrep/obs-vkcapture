@@ -1052,6 +1052,7 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     GETADDR(DestroyInstance);
     GETADDR(GetPhysicalDeviceQueueFamilyProperties);
     GETADDR(GetPhysicalDeviceMemoryProperties);
+    GETADDR(EnumerateDeviceExtensionProperties);
 #undef GETADDR
 
     valid = valid && funcs_found;
@@ -1221,6 +1222,48 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
 
     if (!idata->valid) {
         hlog("instance not valid");
+        return ret;
+    }
+
+    uint32_t device_extension_count = 0;
+    ret = ifuncs->EnumerateDeviceExtensionProperties(
+            phy_device, NULL, &device_extension_count, NULL);
+    if (ret != VK_SUCCESS) {
+        return ret;
+    }
+
+    VkExtensionProperties *device_extensions = malloc(
+            sizeof(VkExtensionProperties) * device_extension_count);
+    ret = ifuncs->EnumerateDeviceExtensionProperties(
+            phy_device, NULL, &device_extension_count, device_extensions);
+    if (ret != VK_SUCCESS) {
+        free(device_extensions);
+        return ret;
+    }
+
+    const char *required_device_extensions[] = {
+        VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME
+    };
+
+    bool extensions_found = true;
+    for (int i = 0; i < sizeof(required_device_extensions) / sizeof(required_device_extensions[0]); i++) {
+        const char *const ext = required_device_extensions[i];
+        bool found = false;
+        for (uint32_t j = 0; j < device_extension_count; j++) {
+            if (!strcmp(ext, device_extensions[j].extensionName)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            hlog("missing device extension: %s", ext);
+            extensions_found = false;
+        }
+    }
+
+    free(device_extensions);
+
+    if (!extensions_found) {
         return ret;
     }
 

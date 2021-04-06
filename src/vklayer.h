@@ -27,6 +27,7 @@ struct vk_inst_funcs {
     DEF_FUNC(DestroyInstance);
     DEF_FUNC(GetPhysicalDeviceQueueFamilyProperties);
     DEF_FUNC(GetPhysicalDeviceMemoryProperties);
+    DEF_FUNC(EnumerateDeviceExtensionProperties);
 };
 
 struct vk_device_funcs {
