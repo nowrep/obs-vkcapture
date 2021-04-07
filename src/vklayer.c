@@ -614,6 +614,10 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         return false;
     }
 
+#ifndef NDEBUG
+    hlog("Got fd %d", swap->dmabuf_fd);
+#endif
+
     return true;
 }
 
