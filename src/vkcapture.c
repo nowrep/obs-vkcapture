@@ -115,7 +115,10 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         if (ctx->clientfd >= 0) {
             os_socket_block(ctx->clientfd, false);
             char b = '1';
-            write(ctx->clientfd, &b, 1);
+            ssize_t ret = write(ctx->clientfd, &b, 1);
+            if (ret != 1) {
+                blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
+            }
         } else {
             if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
                 blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
