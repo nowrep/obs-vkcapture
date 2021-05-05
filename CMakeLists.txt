@@ -32,6 +32,7 @@ endif()
 
 set(LAYER_SOURCES src/vklayer.c src/capture.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
+set_property(TARGET VkLayer_obs_vkcapture PROPERTY C_STANDARD 11)
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 
 set(GL_SOURCES src/glinject.c src/glad/glad.c src/capture.c)
