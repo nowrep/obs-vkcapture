@@ -900,7 +900,8 @@ static void vk_shtex_capture(struct vk_data *data,
 
 static inline bool valid_rect(struct vk_swap_data *swap)
 {
-    return !!swap->image_extent.width && !!swap->image_extent.height;
+    return !!swap->image_extent.width && !!swap->image_extent.height &&
+        (swap->image_extent.width > 1 || swap->image_extent.height > 1);
 }
 
 static void vk_capture(struct vk_data *data, VkQueue queue,
