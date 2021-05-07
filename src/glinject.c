@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "glinject.h"
 #include "capture.h"
 #include "utils.h"
+#include "dlsym.h"
 #include "glad/glad.h"
 #include "plugin-macros.h"
 
@@ -28,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <stdlib.h>
 
 static bool gl_seen = false;
+static bool gl_loaded = false;
 static struct egl_funcs egl_f;
 static struct glx_funcs glx_f;
 static struct x11_funcs x11_f;
@@ -54,7 +56,7 @@ struct gl_data {
 static struct gl_data data;
 
 #define GETADDR(s, p, func) \
-    p.func = (typeof(p.func))dlsym(handle, #s #func); \
+    p.func = (typeof(p.func))real_dlsym(handle, #s #func); \
     if (!p.func) { \
         hlog("Failed to resolve " #s #func); \
         return false; \
@@ -74,7 +76,7 @@ static struct gl_data data;
 #define GETGLXPROCADDR(func) GETPROCADDR(glX, glx_f, func)
 
 #define GETXADDR(func) \
-    x11_f.func = (typeof(x11_f.func))dlsym(handle, #func); \
+    x11_f.func = (typeof(x11_f.func))real_dlsym(handle, #func); \
     if (!x11_f.func) { \
         hlog("Failed to resolve " #func); \
         return false; \
@@ -161,7 +163,6 @@ static bool gl_init_funcs(bool glx)
         egl_f.valid = true;
     }
 
-    gladLoadGL();
     return true;
 }
 
@@ -169,6 +170,19 @@ static bool gl_init_funcs(bool glx)
 #undef GETEGLADDR
 #undef GETPROCADDR
 #undef GETEGLPROCADDR
+
+static bool gl_load()
+{
+    if (gl_loaded) {
+        return glGetError != NULL;
+    }
+    gl_loaded = true;
+    if (!gladLoadGL()) {
+        hlog("Failed to load GL");
+        return false;
+    }
+    return true;
+}
 
 static void querySurface(int *width, int *height)
 {
@@ -186,6 +200,10 @@ static void querySurface(int *width, int *height)
 
 static void gl_free()
 {
+    if (!gl_load()) {
+        return;
+    }
+
     if (data.buf_fd >= 0) {
         close(data.buf_fd);
         data.buf_fd = -1;
@@ -363,6 +381,10 @@ static bool gl_init(void *display, void *surface)
 
 static void gl_capture(void *display, void *surface)
 {
+    if (!gl_load()) {
+        return;
+    }
+
     capture_update_socket();
 
     if (capture_should_stop()) {
@@ -399,7 +421,7 @@ static struct {
     void *func;
     const char *name;
 } egl_hooks_map[] = {
-#define ADD_HOOK(fn) { #fn, (void *) fn }
+#define ADD_HOOK(fn) { (void*)fn, #fn }
     ADD_HOOK(eglGetProcAddress),
     ADD_HOOK(eglSwapBuffers),
     ADD_HOOK(eglDestroyContext)
@@ -408,12 +430,12 @@ static struct {
 
 void *obs_vkcapture_eglGetProcAddress(const char *name)
 {
-   for (int i = 0; i < sizeof(egl_hooks_map) / sizeof(egl_hooks_map[0]); ++i) {
-       if (strcmp(name, egl_hooks_map[i].name) == 0) {
-           return egl_hooks_map[i].func;
-       }
-   }
-   return NULL;
+    for (int i = 0; i < sizeof(egl_hooks_map) / sizeof(egl_hooks_map[0]); ++i) {
+        if (strcmp(name, egl_hooks_map[i].name) == 0) {
+            return egl_hooks_map[i].func;
+        }
+    }
+    return NULL;
 }
 
 void *eglGetProcAddress(const char *procName)
@@ -459,7 +481,7 @@ static struct {
     void *func;
     const char *name;
 } glx_hooks_map[] = {
-#define ADD_HOOK(fn) { #fn, (void *) fn }
+#define ADD_HOOK(fn) { (void*)fn, #fn }
     ADD_HOOK(glXGetProcAddress),
     ADD_HOOK(glXGetProcAddressARB),
     ADD_HOOK(glXSwapBuffers),
@@ -470,12 +492,12 @@ static struct {
 
 void *obs_vkcapture_glXGetProcAddress(const char *name)
 {
-   for (int i = 0; i < sizeof(glx_hooks_map) / sizeof(glx_hooks_map[0]); ++i) {
-       if (strcmp(name, glx_hooks_map[i].name) == 0) {
-           return glx_hooks_map[i].func;
-       }
-   }
-   return NULL;
+    for (int i = 0; i < sizeof(glx_hooks_map) / sizeof(glx_hooks_map[0]); ++i) {
+        if (strcmp(name, glx_hooks_map[i].name) == 0) {
+            return glx_hooks_map[i].func;
+        }
+    }
+    return NULL;
 }
 
 void *glXGetProcAddress(const char *procName)

@@ -48,7 +48,7 @@ target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 set_target_properties(VkLayer_obs_vkcapture PROPERTIES C_STANDARD 11)
 target_include_directories(VkLayer_obs_vkcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
-set(GL_SOURCES src/glinject.c src/glad/glad.c src/capture.c)
+set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/glad/glad.c src/capture.c)
 add_library(obs_glcapture MODULE ${GL_SOURCES})
 target_include_directories(obs_glcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
