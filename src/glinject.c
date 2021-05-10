@@ -171,19 +171,6 @@ static bool gl_init_funcs(bool glx)
 #undef GETPROCADDR
 #undef GETEGLPROCADDR
 
-static bool gl_load()
-{
-    if (gl_loaded) {
-        return glGetError != NULL;
-    }
-    gl_loaded = true;
-    if (!gladLoadGL()) {
-        hlog("Failed to load GL");
-        return false;
-    }
-    return true;
-}
-
 static void querySurface(int *width, int *height)
 {
     if (data.glx) {
@@ -200,7 +187,7 @@ static void querySurface(int *width, int *height)
 
 static void gl_free()
 {
-    if (!gl_load()) {
+    if (!gl_loaded) {
         return;
     }
 
@@ -381,7 +368,13 @@ static bool gl_init(void *display, void *surface)
 
 static void gl_capture(void *display, void *surface)
 {
-    if (!gl_load()) {
+    if (!gl_loaded) {
+        gl_loaded = true;
+        if (!gladLoadGL()) {
+            hlog("Failed to load GL");
+        }
+    }
+    if (glGetError == NULL) {
         return;
     }
 
