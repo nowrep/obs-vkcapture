@@ -191,6 +191,8 @@ static void gl_free()
         return;
     }
 
+    const bool was_capturing = data.buf_fd >= 0;
+
     if (data.buf_fd >= 0) {
         close(data.buf_fd);
         data.buf_fd = -1;
@@ -228,7 +230,9 @@ static void gl_free()
 
     capture_stop();
 
-    hlog("------------------- opengl capture freed -------------------");
+    if (was_capturing) {
+        hlog("------------------- opengl capture freed -------------------");
+    }
 }
 
 static void gl_copy_backbuffer(GLuint dst)
