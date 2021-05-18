@@ -50,6 +50,7 @@ target_include_directories(VkLayer_obs_vkcapture PRIVATE $<BUILD_INTERFACE:${CMA
 
 set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/glad/glad.c src/capture.c)
 add_library(obs_glcapture MODULE ${GL_SOURCES})
+set_target_properties(obs_glcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/glinject.version")
 target_include_directories(obs_glcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
 configure_file(plugin-macros.h.in ${CMAKE_CURRENT_BINARY_DIR}/plugin-macros.h @ONLY)
