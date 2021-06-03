@@ -45,7 +45,7 @@ struct gl_data {
     int buf_fourcc;
     int buf_offset;
     int buf_stride;
-    uint64_t buf_modifiers;
+    uint64_t buf_modifier;
     int buf_fd;
 
     bool glx;
@@ -331,7 +331,7 @@ static bool gl_shtex_init()
         }
 
         int num_planes;
-        const int queried = egl_f.ExportDMABUFImageQueryMESA(data.display, data.image, &data.buf_fourcc, &num_planes, &data.buf_modifiers);
+        const int queried = egl_f.ExportDMABUFImageQueryMESA(data.display, data.image, &data.buf_fourcc, &num_planes, &data.buf_modifier);
         if (!queried) {
             hlog("Failed to query dmabuf export");
             return false;
@@ -363,7 +363,7 @@ static bool gl_init(void *display, void *surface)
     }
 
     capture_init_shtex(data.width, data.height, data.buf_fourcc,
-            data.buf_stride, data.buf_offset, /*flip*/true, data.buf_fd);
+            data.buf_stride, data.buf_offset, data.buf_modifier, /*flip*/true, data.buf_fd);
 
     hlog("------------------ opengl capture started ------------------");
 

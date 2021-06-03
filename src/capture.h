@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <stdint.h>
 #include <stdbool.h>
 
 #ifndef DRM_FORMAT_XRGB8888
@@ -32,12 +33,13 @@ struct capture_texture_data {
     int format;
     int stride;
     int offset;
+    uint64_t modifier;
     bool flip;
 };
 
 void capture_init();
 void capture_update_socket();
-void capture_init_shtex(int width, int height, int format, int stride, int offset, bool flip, int fd);
+void capture_init_shtex(int width, int height, int format, int stride, int offset, uint64_t modifier, bool flip, int fd);
 void capture_stop();
 
 bool capture_should_stop();
