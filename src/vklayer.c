@@ -630,7 +630,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
-        swap->export_layout.rowPitch, swap->export_layout.offset, 0, /*flip*/false, swap->dmabuf_fd);
+        swap->export_layout.rowPitch, swap->export_layout.offset, DRM_FORMAT_MOD_INVALID, /*flip*/false, swap->dmabuf_fd);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;

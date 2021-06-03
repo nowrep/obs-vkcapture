@@ -321,7 +321,9 @@ static bool gl_shtex_init()
         }
         data.buf_fd = x11_f.xcb_dri3_buffer_from_pixmap_reply_fds(data.xcb_con, reply)[0];
         data.buf_stride = reply->stride;
+        data.buf_offset = 0;
         data.buf_fourcc = DRM_FORMAT_XRGB8888;
+        data.buf_modifier = DRM_FORMAT_MOD_INVALID;
         free(reply);
     } else {
         data.image = egl_f.CreateImage(data.display, egl_f.GetCurrentContext(), P_EGL_GL_TEXTURE_2D, data.texture, NULL);

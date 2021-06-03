@@ -25,6 +25,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define fourcc_code(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | \
         ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
 #define DRM_FORMAT_XRGB8888 fourcc_code('X', 'R', '2', '4')
+#define fourcc_mod_code(vendor, val) ((((uint64_t)vendor) << 56) | ((val) & 0x00ffffffffffffffULL))
+#define DRM_FORMAT_MOD_INVALID fourcc_mod_code(0, ((1ULL << 56) - 1))
 #endif
 
 struct capture_texture_data {

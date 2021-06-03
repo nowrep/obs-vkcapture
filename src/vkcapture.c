@@ -179,7 +179,8 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             const uint32_t stride = ctx->data.stride;
             const uint32_t offset = ctx->data.offset;
             ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height,
-                    ctx->data.format, GS_BGRX, 1, &ctx->buf_fd, &stride, &offset, &ctx->data.modifier);
+                    ctx->data.format, GS_BGRX, 1, &ctx->buf_fd, &stride, &offset,
+                    ctx->data.modifier != DRM_FORMAT_MOD_INVALID ? &ctx->data.modifier : NULL);
             obs_leave_graphics();
 
             if (!ctx->texture) {
