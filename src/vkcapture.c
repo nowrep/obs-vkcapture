@@ -287,9 +287,13 @@ static void vkcapture_source_get_defaults(obs_data_t *defaults)
 
 static obs_properties_t *vkcapture_source_get_properties(void *data)
 {
+    const vkcapture_source_t *ctx = data;
+
     obs_properties_t *props = obs_properties_create();
 #if HAVE_X11_XCB
-    obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
+    if (ctx->cursor) {
+        obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
+    }
 #endif
     return props;
 }
