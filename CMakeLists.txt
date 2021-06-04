@@ -4,6 +4,7 @@ project(obs-vkcapture VERSION 0.5)
 
 include(GNUInstallDirs)
 find_package(Vulkan REQUIRED)
+find_package(X11)
 
 if (NOT TARGET libobs)
     find_package(LibObs REQUIRED)
@@ -16,6 +17,10 @@ if (VULKAN_FOUND AND NOT TARGET Vulkan::Vulkan)
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INCLUDE_DIRS}")
 endif()
 
+if (X11_xcb_FOUND AND X11_xcb_xfixes_FOUND)
+    set(HAVE_X11_XCB TRUE)
+endif()
+
 option(BUILD_PLUGIN "Build OBS plugin" ON)
 
 if (${CMAKE_C_FLAGS} MATCHES "-m32")
@@ -26,8 +31,11 @@ endif()
 
 if (BUILD_PLUGIN)
     set(PLUGIN_SOURCES src/vkcapture.c)
+    if (HAVE_X11_XCB)
+        set(PLUGIN_SOURCES ${PLUGIN_SOURCES} src/xcursor-xcb.c)
+    endif()
     add_library(linux-vkcapture MODULE ${PLUGIN_SOURCES})
-    target_link_libraries(linux-vkcapture libobs obs-frontend-api)
+    target_link_libraries(linux-vkcapture libobs obs-frontend-api ${X11_xcb_LIB} ${X11_xcb_xfixes_LIB})
     set_target_properties(linux-vkcapture PROPERTIES PREFIX "")
     target_include_directories(linux-vkcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 

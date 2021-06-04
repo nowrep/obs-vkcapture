@@ -29,9 +29,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "capture.h"
 #include "plugin-macros.h"
 
+#if HAVE_X11_XCB
+#include "xcursor-xcb.h"
+#endif
+
 typedef struct {
     obs_source_t *source;
     gs_texture_t *texture;
+#if HAVE_X11_XCB
+    xcb_connection_t *xcb;
+    xcb_xcursor_t *cursor;
+#endif
+    bool show_cursor;
 
     struct capture_texture_data data;
     int buf_fd;
@@ -70,7 +79,25 @@ static void vkcapture_source_destroy(void *data)
 
     unlink(socket_filename);
 
+#if HAVE_X11_XCB
+    if (ctx->cursor) {
+        obs_enter_graphics();
+        xcb_xcursor_destroy(ctx->cursor);
+        obs_leave_graphics();
+    }
+    if (ctx->xcb) {
+        xcb_disconnect(ctx->xcb);
+    }
+#endif
+
     bfree(ctx);
+}
+
+static void vkcapture_source_update(void *data, obs_data_t *settings)
+{
+    vkcapture_source_t *ctx = data;
+
+    ctx->show_cursor = obs_data_get_bool(settings, "show_cursor");
 }
 
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
@@ -79,6 +106,8 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
     ctx->source = source;
     ctx->buf_fd = -1;
     ctx->clientfd = -1;
+
+    vkcapture_source_update(ctx, settings);
 
     unlink(socket_filename);
 
@@ -102,6 +131,17 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
     }
     os_socket_block(ctx->sockfd, false);
 
+#if HAVE_X11_XCB
+    if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
+        ctx->xcb = xcb_connect(NULL, NULL);
+        if (!ctx->xcb || xcb_connection_has_error(ctx->xcb)) {
+            blog(LOG_ERROR, "Unable to open X display !");
+        } else {
+            ctx->cursor = xcb_xcursor_init(ctx->xcb);
+        }
+    }
+#endif
+
     UNUSED_PARAMETER(settings);
     return ctx;
 }
@@ -109,6 +149,17 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 static void vkcapture_source_video_tick(void *data, float seconds)
 {
     vkcapture_source_t *ctx = data;
+
+#if HAVE_X11_XCB
+    if (ctx->show_cursor && ctx->cursor && obs_source_showing(ctx->source)) {
+        xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(ctx->xcb);
+        xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
+        obs_enter_graphics();
+        xcb_xcursor_update(ctx->cursor, cur_r);
+        obs_leave_graphics();
+        free(cur_r);
+    }
+#endif
 
     if (ctx->clientfd < 0) {
         ctx->clientfd = accept(ctx->sockfd, NULL, NULL);
@@ -204,6 +255,12 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
     gs_effect_set_texture(image, ctx->texture);
 
     gs_draw_sprite(ctx->texture, ctx->data.flip ? GS_FLIP_V : 0, 0, 0);
+
+#if HAVE_X11_XCB
+    if (ctx->show_cursor && ctx->cursor) {
+        xcb_xcursor_render(ctx->cursor);
+    }
+#endif
 }
 
 static const char *vkcapture_source_get_name(void *data)
@@ -223,6 +280,20 @@ static uint32_t vkcapture_source_get_height(void *data)
     return ctx->data.height;
 }
 
+static void vkcapture_source_get_defaults(obs_data_t *defaults)
+{
+    obs_data_set_default_bool(defaults, "show_cursor", true);
+}
+
+static obs_properties_t *vkcapture_source_get_properties(void *data)
+{
+    obs_properties_t *props = obs_properties_create();
+#if HAVE_X11_XCB
+    obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
+#endif
+    return props;
+}
+
 struct obs_source_info vkcapture_input = {
     .id = "vkcapture-source",
     .type = OBS_SOURCE_TYPE_INPUT,
@@ -230,10 +301,13 @@ struct obs_source_info vkcapture_input = {
     .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_DO_NOT_DUPLICATE,
     .create = vkcapture_source_create,
     .destroy = vkcapture_source_destroy,
+    .update = vkcapture_source_update,
     .video_tick = vkcapture_source_video_tick,
     .video_render = vkcapture_source_render,
     .get_width = vkcapture_source_get_width,
     .get_height = vkcapture_source_get_height,
+    .get_defaults = vkcapture_source_get_defaults,
+    .get_properties = vkcapture_source_get_properties,
     .icon_type = OBS_ICON_TYPE_GAME_CAPTURE,
 };
 
