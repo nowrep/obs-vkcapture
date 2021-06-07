@@ -506,6 +506,8 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 {
     struct vk_device_funcs *funcs = &data->funcs;
 
+    hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
+
     // create image (for dedicated allocation)
     VkImageCreateInfo img_info = {};
     img_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -527,7 +529,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     VkResult res;
     res = funcs->CreateImage(device, &img_info, data->ac, &swap->export_image);
     if (VK_SUCCESS != res) {
-        hlog("Failed to CreateImage %d", res);
+        hlog("Failed to CreateImage %s", result_to_str(res));
         swap->export_image = VK_NULL_HANDLE;
         return false;
     }
@@ -584,7 +586,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     res = funcs->AllocateMemory(device, &memi, NULL, &swap->export_mem);
     if (VK_SUCCESS != res) {
-        hlog("failed to AllocateMemory: %d", res);
+        hlog("failed to AllocateMemory %s", result_to_str(res));
         funcs->DestroyImage(device, swap->export_image, data->ac);
         return false;
     }
@@ -596,7 +598,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     bimi.memoryOffset = 0;
     res = funcs->BindImageMemory2(device, 1, &bimi);
     if (VK_SUCCESS != res) {
-        hlog("BindImageMemory2 failed %d", res);
+        hlog("BindImageMemory2 failed %s", result_to_str(res));
         funcs->DestroyImage(device, swap->export_image, data->ac);
         swap->export_image = VK_NULL_HANDLE;
         return false;
@@ -608,7 +610,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     gfdi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
     res = funcs->GetMemoryFdKHR(device, &gfdi, &swap->dmabuf_fd);
     if (VK_SUCCESS != res) {
-        hlog("GetMemoryFdKHR failed %d", res);
+        hlog("GetMemoryFdKHR failed %s", result_to_str(res));
         funcs->DestroyImage(device, swap->export_image, data->ac);
         swap->export_image = VK_NULL_HANDLE;
         return false;
@@ -663,7 +665,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
         VkResult res = data->funcs.CreateCommandPool(
                 device, &cpci, data->ac, &frame_data->cmd_pool);
 #ifndef NDEBUG
-        hlog("CreateCommandPool %d", res);
+        hlog("CreateCommandPool %s", result_to_str(res));
 #endif
 
         VkCommandBufferAllocateInfo cbai;
@@ -676,7 +678,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
         res = data->funcs.AllocateCommandBuffers(
                 device, &cbai, &frame_data->cmd_buffer);
 #ifndef NDEBUG
-        hlog("AllocateCommandBuffers %d", res);
+        hlog("AllocateCommandBuffers %s", result_to_str(res));
 #endif
         GET_LDT(frame_data->cmd_buffer) = GET_LDT(device);
 
@@ -687,7 +689,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
         res = data->funcs.CreateFence(device, &fci, data->ac,
                &frame_data->fence);
 #ifndef NDEBUG
-        hlog("CreateFence %d", res);
+        hlog("CreateFence %s", result_to_str(res));
 #endif
     }
 }
@@ -772,14 +774,14 @@ static void vk_shtex_capture(struct vk_data *data,
     res = funcs->ResetCommandPool(device, frame_data->cmd_pool, 0);
 
 #ifndef NDEBUG
-    hlog("ResetCommandPool %d", res);
+    hlog("ResetCommandPool %s", result_to_str(res));
 #endif
 
     const VkCommandBuffer cmd_buffer = frame_data->cmd_buffer;
     res = funcs->BeginCommandBuffer(cmd_buffer, &begin_info);
 
 #ifndef NDEBUG
-    hlog("BeginCommandBuffer %d", res);
+    hlog("BeginCommandBuffer %s", result_to_str(res));
 #endif
 
     /* ------------------------------------------------------ */
@@ -891,7 +893,7 @@ static void vk_shtex_capture(struct vk_data *data,
     res = funcs->QueueSubmit(queue, 1, &submit_info, fence);
 
 #ifndef NDEBUG
-    hlog("QueueSubmit %d", res);
+    hlog("QueueSubmit %s", result_to_str(res));
 #endif
 
     if (res == VK_SUCCESS)
@@ -1022,7 +1024,7 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
 
     VkResult res = create(&info, ac, p_inst);
 #ifndef NDEBUG
-    hlog("CreateInstance %d", res);
+    hlog("CreateInstance %s", result_to_str(res));
 #endif
     bool valid = res == VK_SUCCESS;
     if (!valid) {
@@ -1161,7 +1163,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
 
     ret = createFunc(phy_device, info, ac, p_device);
 #ifndef NDEBUG
-    hlog("CreateDevice %d", ret);
+    hlog("CreateDevice %s", result_to_str(ret));
 #endif
     if (ret != VK_SUCCESS) {
         vk_free(ac, data);
@@ -1364,7 +1366,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
     info.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     VkResult res = funcs->CreateSwapchainKHR(device, &info, ac, p_sc);
 #ifndef NDEBUG
-    hlog("CreateSwapchainKHR %d", res);
+    hlog("CreateSwapchainKHR %s", result_to_str(res));
 #endif
     if (res != VK_SUCCESS) {
         /* try again with original imageUsage flags */
@@ -1375,7 +1377,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
     uint32_t count = 0;
     res = funcs->GetSwapchainImagesKHR(device, sc, &count, NULL);
 #ifndef NDEBUG
-    hlog("GetSwapchainImagesKHR %d", res);
+    hlog("GetSwapchainImagesKHR %s", result_to_str(res));
 #endif
     if ((res == VK_SUCCESS) && (count > 0)) {
         struct vk_swap_data *swap_data = alloc_swap_data(ac);
@@ -1387,7 +1389,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
             res = funcs->GetSwapchainImagesKHR(
                     device, sc, &count, swap_data->swap_images);
 #ifndef NDEBUG
-            hlog("GetSwapchainImagesKHR %d", res);
+            hlog("GetSwapchainImagesKHR %s", result_to_str(res));
 #endif
             swap_data->image_extent = cinfo->imageExtent;
             swap_data->format = cinfo->imageFormat;

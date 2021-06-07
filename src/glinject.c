@@ -267,6 +267,8 @@ static bool gl_shtex_init()
         return false;
     }
 
+    hlog("Texture %s %ux%u", "GL_RGBA", data.width, data.height);
+
     glGenTextures(1, &data.texture);
     glBindTexture(GL_TEXTURE_2D, data.texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, data.width, data.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
