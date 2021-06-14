@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include <inttypes.h>
 #include <vulkan/vk_layer.h>
 
 #define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)
@@ -65,6 +66,7 @@ struct vk_swap_data {
     uint32_t image_count;
 
     int dmabuf_fd;
+    uint64_t dmabuf_modifier;
     bool captured;
 };
 
@@ -598,6 +600,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     if (VK_SUCCESS != res) {
         hlog("failed to AllocateMemory %s", result_to_str(res));
         funcs->DestroyImage(device, swap->export_image, data->ac);
+        swap->export_image = VK_NULL_HANDLE;
         return false;
     }
 
@@ -626,8 +629,23 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         return false;
     }
 
+    if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
+        VkImageDrmFormatModifierPropertiesEXT image_mod_props = {};
+        image_mod_props.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT;
+        res = funcs->GetImageDrmFormatModifierPropertiesEXT(device, swap->export_image, &image_mod_props);
+        hlog("suc %s", result_to_str(res));
+        if (VK_SUCCESS != res) {
+            hlog("GetImageDrmFormatModifierPropertiesEXT failed %s", result_to_str(res));
+            swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
+        } else {
+            swap->dmabuf_modifier = image_mod_props.drmFormatModifier;
+        }
+    } else {
+        swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
+    }
+
 #ifndef NDEBUG
-    hlog("Got fd %d", swap->dmabuf_fd);
+    hlog("Got fd %d - modifier %"PRIu64, swap->dmabuf_fd, swap->dmabuf_modifier);
 #endif
 
     return true;
@@ -642,7 +660,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
-        swap->export_layout.rowPitch, swap->export_layout.offset, DRM_FORMAT_MOD_INVALID, /*flip*/false, swap->dmabuf_fd);
+        swap->export_layout.rowPitch, swap->export_layout.offset, swap->dmabuf_modifier, /*flip*/false, swap->dmabuf_fd);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;
@@ -1113,18 +1131,34 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     struct vk_inst_funcs *ifuncs = &idata->funcs;
     struct vk_data *data = NULL;
 
-    bool add_ext = true;
+    bool add_mem_fd_ext = true;
+    bool add_drm_mod_ext = true;
     for (uint32_t i = 0; i < info->enabledExtensionCount; ++i) {
         if (!strcmp(info->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME)) {
-            add_ext = false;
+            add_mem_fd_ext = false;
+        } else if (!strcmp(info->ppEnabledExtensionNames[i], VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME)) {
+            add_drm_mod_ext = false;
         }
     }
-    if (add_ext) {
+    int add_count = 0;
+    if (add_mem_fd_ext) {
+        add_count++;
         hlog("Injecting %s extension", VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
-        int new_count = info->enabledExtensionCount + 1;
+    }
+    if (add_drm_mod_ext) {
+        add_count++;
+        hlog("Injecting %s extension", VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+    }
+    if (add_count) {
+        int new_count = info->enabledExtensionCount + add_count;
         const char **exts = (const char**)malloc(sizeof(char*) * new_count);
         memcpy(exts, info->ppEnabledExtensionNames, sizeof(char*) * info->enabledExtensionCount);
-        exts[new_count - 1] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
+        if (add_mem_fd_ext) {
+            exts[new_count - add_count--] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
+        }
+        if (add_drm_mod_ext) {
+            exts[new_count - add_count--] = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME;
+        }
         VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)info;
         i->enabledExtensionCount = new_count;
         i->ppEnabledExtensionNames = exts;
@@ -1230,6 +1264,12 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(ResetFences);
     GETADDR(GetImageSubresourceLayout);
     GETADDR(GetMemoryFdKHR);
+
+    dfuncs->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)
+        gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
+    if (!dfuncs->GetImageDrmFormatModifierPropertiesEXT) {
+        hlog("DRM format modifiers support not available");
+    }
 
 #undef GETADDR
 

@@ -59,6 +59,7 @@ struct vk_device_funcs {
     DEF_FUNC(ResetFences);
     DEF_FUNC(GetImageSubresourceLayout);
     DEF_FUNC(GetMemoryFdKHR);
+    DEF_FUNC(GetImageDrmFormatModifierPropertiesEXT);
 };
 
 #undef DEF_FUNC
