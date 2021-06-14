@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/un.h>
 #include <sys/socket.h>
 
@@ -46,9 +47,8 @@ typedef struct {
     int buf_fd;
     int sockfd;
     int clientfd;
+    char *sockname;
 } vkcapture_source_t;
-
-static const char *socket_filename = "/tmp/obs-vkcapture.sock";
 
 static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
 {
@@ -77,7 +77,7 @@ static void vkcapture_source_destroy(void *data)
         close(ctx->sockfd);
     }
 
-    unlink(socket_filename);
+    unlink(ctx->sockname);
 
 #if HAVE_X11_XCB
     if (ctx->cursor) {
@@ -109,11 +109,20 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 
     vkcapture_source_update(ctx, settings);
 
-    unlink(socket_filename);
+    const char *name = "/obs-vkcapture.socket";
+    const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
+    if (!runtime_dir) {
+        runtime_dir = "/tmp";
+    }
+    ctx->sockname = malloc(strlen(runtime_dir) + strlen(name) + 1);
+    strcpy(ctx->sockname, runtime_dir);
+    strcat(ctx->sockname, name);
+
+    unlink(ctx->sockname);
 
     struct sockaddr_un addr = {0};
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, socket_filename);
+    strcpy(addr.sun_path, ctx->sockname);
     ctx->sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     int ret = bind(ctx->sockfd, (const struct sockaddr *)&addr, sizeof(addr));

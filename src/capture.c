@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/un.h>
 #include <sys/socket.h>
 
@@ -29,19 +30,18 @@ struct {
     int connfd;
     bool accepted;
     bool capturing;
+    char *sockname;
 } data;
 
 static bool capture_try_connect()
 {
-    const char *sockname = "/tmp/obs-vkcapture.sock";
-
-    if (access(sockname, R_OK) != 0) {
+    if (access(data.sockname, R_OK) != 0) {
         return false;
     }
 
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, sockname);
+    strcpy(addr.sun_path, data.sockname);
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     int ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
     if (ret == -1) {
@@ -59,6 +59,15 @@ void capture_init()
     data.connfd = -1;
     data.accepted = false;
     data.capturing = false;
+
+    const char *name = "/obs-vkcapture.socket";
+    const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
+    if (!runtime_dir) {
+        runtime_dir = "/tmp";
+    }
+    data.sockname = malloc(strlen(runtime_dir) + strlen(name) + 1);
+    strcpy(data.sockname, runtime_dir);
+    strcat(data.sockname, name);
 }
 
 void capture_update_socket()
