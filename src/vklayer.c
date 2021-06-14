@@ -579,8 +579,18 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         return false;
     }
 
+    VkExportMemoryAllocateInfo memory_export_info = {};
+    memory_export_info.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+    memory_export_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
+    VkMemoryDedicatedAllocateInfo memory_dedicated_info = {};
+    memory_dedicated_info.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+    memory_dedicated_info.pNext = &memory_export_info;
+    memory_dedicated_info.image = swap->export_image;
+
     VkMemoryAllocateInfo memi = {};
     memi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memi.pNext = &memory_dedicated_info;
     memi.allocationSize = memr.memoryRequirements.size;
     memi.memoryTypeIndex = mem_type_idx;
 
