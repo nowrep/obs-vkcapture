@@ -158,7 +158,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
     vkcapture_source_t *ctx = data;
 
 #if HAVE_X11_XCB
-    if (ctx->show_cursor && ctx->cursor && obs_source_showing(ctx->source)) {
+    if (ctx->texture && ctx->show_cursor && ctx->cursor && obs_source_showing(ctx->source)) {
         if (!ctx->root_winid && ctx->data.winid) {
             xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->data.winid);
             xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
