@@ -160,7 +160,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
 #if HAVE_X11_XCB
     if (ctx->show_cursor && ctx->cursor && obs_source_showing(ctx->source)) {
         if (!ctx->root_winid && ctx->data.winid) {
-            xcb_query_tree_cookie_t tre_c = xcb_query_tree(ctx->xcb, ctx->data.winid);
+            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->data.winid);
             xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
             if (tre_r) {
                 ctx->root_winid = tre_r->root;
@@ -169,7 +169,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         }
         xcb_translate_coordinates_cookie_t tr_c;
         if (ctx->root_winid && ctx->data.winid) {
-            tr_c = xcb_translate_coordinates(ctx->xcb, ctx->data.winid, ctx->root_winid, 0, 0);
+            tr_c = xcb_translate_coordinates_unchecked(ctx->xcb, ctx->data.winid, ctx->root_winid, 0, 0);
         }
         xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(ctx->xcb);
         xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
