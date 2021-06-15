@@ -155,6 +155,7 @@ static bool gl_init_funcs(bool glx)
         GETEGLADDR(GetProcAddress);
         GETEGLADDR(DestroyContext);
         GETEGLADDR(GetCurrentContext);
+        GETEGLADDR(CreateWindowSurface);
         GETEGLADDR(CreateImage);
         GETEGLADDR(DestroyImage);
         GETEGLADDR(QuerySurface);
@@ -362,6 +363,10 @@ static bool gl_init(void *display, void *surface)
     data.surface = surface;
     querySurface(&data.width, &data.height);
 
+    if (data.glx) {
+        data.winid = (uintptr_t)surface;
+    }
+
     if (!gl_shtex_init()) {
         hlog("shtex init failed");
         return false;
@@ -419,6 +424,7 @@ static void gl_capture(void *display, void *surface)
 void *eglGetProcAddress(const char *procName);
 unsigned eglDestroyContext(void *display, void *context);
 unsigned eglSwapBuffers(void *display, void *surface);
+void *eglCreateWindowSurface(void *display, void *config, void *win, const intptr_t *attrib_list);
 
 static struct {
     void *func;
@@ -427,7 +433,8 @@ static struct {
 #define ADD_HOOK(fn) { (void*)fn, #fn }
     ADD_HOOK(eglGetProcAddress),
     ADD_HOOK(eglSwapBuffers),
-    ADD_HOOK(eglDestroyContext)
+    ADD_HOOK(eglDestroyContext),
+    ADD_HOOK(eglCreateWindowSurface)
 #undef ADD_HOOK
 };
 
@@ -470,6 +477,20 @@ unsigned eglSwapBuffers(void *display, void *surface)
     gl_capture(display, surface);
 
     return egl_f.SwapBuffers(display, surface);
+}
+
+void *eglCreateWindowSurface(void *display, void *config, void *win, const intptr_t *attrib_list)
+{
+    if (!gl_init_funcs(/*glx*/false)) {
+        return 0;
+    }
+
+    void *res = egl_f.CreateWindowSurface(display, config, win, attrib_list);
+    if (res) {
+        data.winid = (uintptr_t)win;
+    }
+
+    return res;
 }
 
 /* ======================================================================== */

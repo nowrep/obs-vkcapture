@@ -29,6 +29,7 @@ struct egl_funcs {
     void *(*GetProcAddress)(const char*);
     unsigned (*DestroyContext)(void *display, void *context);
     void *(*GetCurrentContext)();
+    void *(*CreateWindowSurface)(void *display, void *config, void *win, const intptr_t *attrib_list);
     void *(*CreateImage)(void *display, void *context, unsigned target, intptr_t buffer, const intptr_t *attrib_list);
     unsigned (*DestroyImage)(void *display, void *image);
     unsigned (*QuerySurface)(void *display, void *surface, int attribute, int *value);
