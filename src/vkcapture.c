@@ -175,8 +175,10 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
         if (ctx->root_winid && ctx->data.winid) {
             xcb_translate_coordinates_reply_t *tr_r = xcb_translate_coordinates_reply(ctx->xcb, tr_c, NULL);
-            xcb_xcursor_offset(ctx->cursor, tr_r->dst_x, tr_r->dst_y);
-            free(tr_r);
+            if (tr_r) {
+                xcb_xcursor_offset(ctx->cursor, tr_r->dst_x, tr_r->dst_y);
+                free(tr_r);
+            }
         }
         obs_enter_graphics();
         xcb_xcursor_update(ctx->cursor, cur_r);
