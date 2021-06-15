@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PLUGINNAME_H
 
 #cmakedefine01 HAVE_X11_XCB
+#cmakedefine01 HAVE_X11_XLIB
 
 #define PLUGIN_NAME "linux-vkcapture"
 #define PLUGIN_VERSION "@CMAKE_PROJECT_VERSION@"

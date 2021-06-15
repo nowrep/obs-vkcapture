@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.19)
 
 project(obs-vkcapture VERSION 0.6)
 
@@ -17,6 +17,9 @@ if (VULKAN_FOUND AND NOT TARGET Vulkan::Vulkan)
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INCLUDE_DIRS}")
 endif()
 
+if (X11_FOUND)
+    set(HAVE_X11_XLIB TRUE)
+endif()
 if (X11_xcb_FOUND AND X11_xcb_xfixes_FOUND)
     set(HAVE_X11_XCB TRUE)
 endif()

@@ -36,12 +36,16 @@ struct capture_texture_data {
     int stride;
     int offset;
     uint64_t modifier;
+    uint32_t winid;
     bool flip;
 };
 
 void capture_init();
 void capture_update_socket();
-void capture_init_shtex(int width, int height, int format, int stride, int offset, uint64_t modifier, bool flip, int fd);
+void capture_init_shtex(
+        int width, int height, int format, int stride,
+        int offset, uint64_t modifier, uint32_t winid,
+        bool flip, int fd);
 void capture_stop();
 
 bool capture_should_stop();

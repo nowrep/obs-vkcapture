@@ -18,7 +18,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "vklayer.h"
 #include "capture.h"
-#include "plugin-macros.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -59,6 +58,7 @@ struct vk_swap_data {
 
     VkExtent2D image_extent;
     VkFormat format;
+    uint32_t winid;
     VkImage export_image;
     VkDeviceMemory export_mem;
     VkSubresourceLayout export_layout;
@@ -87,6 +87,12 @@ struct vk_frame_data {
     bool cmd_buffer_busy;
 };
 
+struct vk_surf_data {
+    struct vk_obj_node node;
+
+    uint32_t winid;
+};
+
 struct vk_inst_data {
     struct vk_obj_node node;
 
@@ -95,6 +101,7 @@ struct vk_inst_data {
     bool valid;
 
     struct vk_inst_funcs funcs;
+    struct vk_obj_list surfaces;
 };
 
 struct vk_data {
@@ -447,6 +454,36 @@ static void vk_shtex_free(struct vk_data *data)
 
 /* ------------------------------------------------------------------------- */
 
+static void add_surf_data(struct vk_inst_data *idata, VkSurfaceKHR surf,
+        uint32_t winid, const VkAllocationCallbacks *ac)
+{
+    struct vk_surf_data *surf_data = vk_alloc(
+            ac, sizeof(struct vk_surf_data), _Alignof(struct vk_surf_data),
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    if (surf_data) {
+        surf_data->winid = winid;
+
+        add_obj_data(&idata->surfaces, (uint64_t)surf, surf_data);
+    }
+}
+
+static uint32_t find_surf_winid(struct vk_inst_data *idata, VkSurfaceKHR surf)
+{
+    struct vk_surf_data *surf_data = (struct vk_surf_data *)get_obj_data(
+            &idata->surfaces, (uint64_t)surf);
+    return surf_data ? surf_data->winid : 0;
+}
+
+static void remove_free_surf_data(struct vk_inst_data *idata, VkSurfaceKHR surf,
+        const VkAllocationCallbacks *ac)
+{
+    struct vk_surf_data *surf_data = (struct vk_surf_data *)remove_obj_data(
+            &idata->surfaces, (uint64_t)surf);
+    vk_free(ac, surf_data);
+}
+
+/* ------------------------------------------------------------------------- */
+
 static struct vk_obj_list instances;
 
 static struct vk_inst_data *alloc_inst_data(const VkAllocationCallbacks *ac)
@@ -660,7 +697,8 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
-        swap->export_layout.rowPitch, swap->export_layout.offset, swap->dmabuf_modifier, /*flip*/false, swap->dmabuf_fd);
+        swap->export_layout.rowPitch, swap->export_layout.offset, swap->dmabuf_modifier,
+        swap->winid, /*flip*/false, swap->dmabuf_fd);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;
@@ -1088,10 +1126,20 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     GETADDR(GetPhysicalDeviceQueueFamilyProperties);
     GETADDR(GetPhysicalDeviceMemoryProperties);
     GETADDR(EnumerateDeviceExtensionProperties);
+#if HAVE_X11_XCB
+    GETADDR(CreateXcbSurfaceKHR);
+#endif
+#if HAVE_X11_XLIB
+    GETADDR(CreateXlibSurfaceKHR);
+#endif
+    GETADDR(DestroySurfaceKHR);
 #undef GETADDR
 
     valid = valid && funcs_found;
     idata->valid = valid;
+
+    if (valid)
+        init_obj_list(&idata->surfaces);
 
     return res;
 }
@@ -1443,6 +1491,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
 #endif
             swap_data->image_extent = cinfo->imageExtent;
             swap_data->format = cinfo->imageFormat;
+            swap_data->winid = find_surf_winid(data->inst_data, cinfo->surface);
             swap_data->export_image = VK_NULL_HANDLE;
             swap_data->export_mem = VK_NULL_HANDLE;
             swap_data->image_count = count;
@@ -1483,6 +1532,61 @@ static void VKAPI_CALL OBS_DestroySwapchainKHR(VkDevice device,
     destroy_swapchain(device, sc, ac);
 }
 
+#if HAVE_X11_XCB
+static VkResult VKAPI_CALL OBS_CreateXcbSurfaceKHR(
+        VkInstance inst, const VkXcbSurfaceCreateInfoKHR *info,
+        const VkAllocationCallbacks *ac, VkSurfaceKHR *surf)
+{
+#ifndef NDEBUG
+    hlog("CreateXcbSurfaceKHR");
+#endif
+
+    struct vk_inst_data *idata = get_inst_data(inst);
+    struct vk_inst_funcs *ifuncs = &idata->funcs;
+
+    VkResult res = ifuncs->CreateXcbSurfaceKHR(inst, info, ac, surf);
+    if ((res == VK_SUCCESS) && idata->valid)
+        add_surf_data(idata, *surf, info->window, ac);
+    return res;
+}
+#endif
+
+#if HAVE_X11_XLIB
+static VkResult VKAPI_CALL OBS_CreateXlibSurfaceKHR(
+        VkInstance inst, const VkXlibSurfaceCreateInfoKHR *info,
+        const VkAllocationCallbacks *ac, VkSurfaceKHR *surf)
+{
+#ifndef NDEBUG
+    hlog("CreateXlibSurfaceKHR");
+#endif
+
+    struct vk_inst_data *idata = get_inst_data(inst);
+    struct vk_inst_funcs *ifuncs = &idata->funcs;
+
+    VkResult res = ifuncs->CreateXlibSurfaceKHR(inst, info, ac, surf);
+    if ((res == VK_SUCCESS) && idata->valid)
+        add_surf_data(idata, *surf, info->window, ac);
+    return res;
+}
+#endif
+
+static void VKAPI_CALL OBS_DestroySurfaceKHR(VkInstance inst, VkSurfaceKHR surf,
+        const VkAllocationCallbacks *ac)
+{
+#ifndef NDEBUG
+    hlog("DestroySurfaceKHR");
+#endif
+
+    struct vk_inst_data *idata = get_inst_data(inst);
+    struct vk_inst_funcs *ifuncs = &idata->funcs;
+    PFN_vkDestroySurfaceKHR destroy_surface = ifuncs->DestroySurfaceKHR;
+
+    if ((surf != VK_NULL_HANDLE) && idata->valid)
+        remove_free_surf_data(idata, surf, ac);
+
+    destroy_surface(inst, surf, ac);
+}
+
 #define GETPROCADDR(func)               \
     if (!strcmp(pName, "vk" #func)) \
     return (PFN_vkVoidFunction)&OBS_##func;
@@ -1519,6 +1623,13 @@ static PFN_vkVoidFunction VKAPI_CALL OBS_GetInstanceProcAddr(VkInstance instance
 #if RETURN_FP_FOR_NULL_INSTANCE
     /* other instance chain functions we intercept */
     GETPROCADDR(DestroyInstance);
+#if HAVE_X11_XCB
+    GETPROCADDR(CreateXcbSurfaceKHR);
+#endif
+#if HAVE_X11_XLIB
+    GETPROCADDR(CreateXlibSurfaceKHR);
+#endif
+    GETPROCADDR(DestroySurfaceKHR);
 
     /* device chain functions we intercept */
     GETPROCADDR(GetDeviceProcAddr);
@@ -1537,6 +1648,13 @@ static PFN_vkVoidFunction VKAPI_CALL OBS_GetInstanceProcAddr(VkInstance instance
 
     /* other instance chain functions we intercept */
     GETPROCADDR(DestroyInstance);
+#if HAVE_X11_XCB
+    GETPROCADDR_IF_SUPPORTED(CreateXcbSurfaceKHR);
+#endif
+#if HAVE_X11_XLIB
+    GETPROCADDR_IF_SUPPORTED(CreateXlibSurfaceKHR);
+#endif
+    GETPROCADDR_IF_SUPPORTED(DestroySurfaceKHR);
 
     /* device chain functions we intercept */
     GETPROCADDR(GetDeviceProcAddr);

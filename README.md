@@ -30,4 +30,3 @@ AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
 * Only supports capturing one game at a time
 * Requires VK_EXT_external_memory_dma_buf - not available in NVIDIA proprietary driver
-* Cursor position will be wrong for non-fullscreen windows

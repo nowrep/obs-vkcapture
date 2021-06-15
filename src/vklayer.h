@@ -18,7 +18,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include "plugin-macros.h"
+
 #include <vulkan/vulkan.h>
+#if HAVE_X11_XCB
+#include <xcb/xcb.h>
+#include <vulkan/vulkan_xcb.h>
+#endif
+#if HAVE_X11_XLIB
+#include <X11/Xlib.h>
+#include <vulkan/vulkan_xlib.h>
+#endif
 
 #define DEF_FUNC(x) PFN_vk##x x
 
@@ -28,6 +38,13 @@ struct vk_inst_funcs {
     DEF_FUNC(GetPhysicalDeviceQueueFamilyProperties);
     DEF_FUNC(GetPhysicalDeviceMemoryProperties);
     DEF_FUNC(EnumerateDeviceExtensionProperties);
+#if HAVE_X11_XCB
+    DEF_FUNC(CreateXcbSurfaceKHR);
+#endif
+#if HAVE_X11_XLIB
+    DEF_FUNC(CreateXlibSurfaceKHR);
+#endif
+    DEF_FUNC(DestroySurfaceKHR);
 };
 
 struct vk_device_funcs {
