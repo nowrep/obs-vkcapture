@@ -566,6 +566,8 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.tiling = VK_IMAGE_TILING_LINEAR;
 
     uint64_t *image_modifiers = NULL;
+    VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list = {};
+
     if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
         VkDrmFormatModifierPropertiesListEXT modifier_props_list = {};
         modifier_props_list.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
@@ -615,19 +617,17 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
                 modifier_props[modifier_prop_count++] = modifier_props[i];
         }
 
-        image_modifiers =
-            vk_alloc(data->ac, sizeof(uint64_t) * modifier_prop_count,
-                    _Alignof(uint64_t), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        if (modifier_prop_count > 0) {
+            image_modifiers =
+                vk_alloc(data->ac, sizeof(uint64_t) * modifier_prop_count,
+                        _Alignof(uint64_t), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
-        uint32_t image_modifier_count = 0;
-        for (uint32_t i = 0; i < modifier_prop_count; ++i) {
-            image_modifiers[image_modifier_count++] = modifier_props[i].drmFormatModifier;
-        }
+            for (uint32_t i = 0; i < modifier_prop_count; ++i) {
+                image_modifiers[i] = modifier_props[i].drmFormatModifier;
+            }
 
-        if (image_modifier_count > 0) {
-            VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list = {};
             image_modifier_list.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
-            image_modifier_list.drmFormatModifierCount = image_modifier_count;
+            image_modifier_list.drmFormatModifierCount = modifier_prop_count;
             image_modifier_list.pDrmFormatModifiers = image_modifiers;
             img_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
             img_info.pNext = &image_modifier_list;
