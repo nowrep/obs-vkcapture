@@ -544,6 +544,8 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         struct vk_swap_data *swap)
 {
     struct vk_device_funcs *funcs = &data->funcs;
+    struct vk_inst_funcs *ifuncs =
+        get_inst_funcs_by_physical_device(data->phy_device);
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
@@ -563,10 +565,84 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     img_info.tiling = VK_IMAGE_TILING_LINEAR;
 
+    uint64_t *image_modifiers = NULL;
+    if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
+        VkDrmFormatModifierPropertiesListEXT modifier_props_list = {};
+        modifier_props_list.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+
+        VkFormatProperties2 format_props = {};
+        format_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+        format_props.pNext = &modifier_props_list;
+
+        ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
+                img_info.format, &format_props);
+
+        struct VkDrmFormatModifierPropertiesEXT *modifier_props =
+            vk_alloc(data->ac, modifier_props_list.drmFormatModifierCount * sizeof(struct VkDrmFormatModifierPropertiesEXT),
+                    _Alignof(struct VkDrmFormatModifierPropertiesEXT), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+        modifier_props_list.pDrmFormatModifierProperties = modifier_props;
+
+        ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
+                img_info.format, &format_props);
+
+        uint32_t modifier_prop_count = 0;
+        for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
+            if (modifier_props[i].drmFormatModifierPlaneCount != 1) {
+                continue;
+            }
+            VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {};
+            mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
+            mod_info.drmFormatModifier = modifier_props[i].drmFormatModifier;
+            mod_info.sharingMode = img_info.sharingMode;
+
+            VkPhysicalDeviceImageFormatInfo2 format_info = {};
+            format_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+            format_info.pNext = &mod_info;
+            format_info.format = img_info.format;
+            format_info.type = VK_IMAGE_TYPE_2D;
+            format_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+            format_info.usage = img_info.usage;
+            format_info.flags = img_info.flags;
+
+            VkImageFormatProperties2 format_props = {};
+            format_props.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+            format_props.pNext = NULL;
+
+            VkResult result = ifuncs->GetPhysicalDeviceImageFormatProperties2(data->phy_device,
+                    &format_info, &format_props);
+            if (result == VK_SUCCESS)
+                modifier_props[modifier_prop_count++] = modifier_props[i];
+        }
+
+        image_modifiers =
+            vk_alloc(data->ac, sizeof(uint64_t) * modifier_prop_count,
+                    _Alignof(uint64_t), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+        uint32_t image_modifier_count = 0;
+        for (uint32_t i = 0; i < modifier_prop_count; ++i) {
+            image_modifiers[image_modifier_count++] = modifier_props[i].drmFormatModifier;
+        }
+
+        if (image_modifier_count > 0) {
+            VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list = {};
+            image_modifier_list.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+            image_modifier_list.drmFormatModifierCount = image_modifier_count;
+            image_modifier_list.pDrmFormatModifiers = image_modifiers;
+            img_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+            img_info.pNext = &image_modifier_list;
+        } else {
+            hlog("No suitable DRM modifier found!");
+        }
+
+        vk_free(data->ac, modifier_props);
+    }
+
     VkDevice device = data->device;
 
     VkResult res;
     res = funcs->CreateImage(device, &img_info, data->ac, &swap->export_image);
+    vk_free(data->ac, image_modifiers);
     if (VK_SUCCESS != res) {
         hlog("Failed to CreateImage %s", result_to_str(res));
         swap->export_image = VK_NULL_HANDLE;
@@ -588,9 +664,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     /* -------------------------------------------------------- */
     /* get memory type index                                    */
-
-    struct vk_inst_funcs *ifuncs =
-        get_inst_funcs_by_physical_device(data->phy_device);
 
     VkPhysicalDeviceMemoryProperties pdmp;
     ifuncs->GetPhysicalDeviceMemoryProperties(data->phy_device, &pdmp);
@@ -664,7 +737,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         VkImageDrmFormatModifierPropertiesEXT image_mod_props = {};
         image_mod_props.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT;
         res = funcs->GetImageDrmFormatModifierPropertiesEXT(device, swap->export_image, &image_mod_props);
-        hlog("suc %s", result_to_str(res));
         if (VK_SUCCESS != res) {
             hlog("GetImageDrmFormatModifierPropertiesEXT failed %s", result_to_str(res));
             swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
@@ -1128,6 +1200,8 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     GETADDR(DestroyInstance);
     GETADDR(GetPhysicalDeviceQueueFamilyProperties);
     GETADDR(GetPhysicalDeviceMemoryProperties);
+    GETADDR(GetPhysicalDeviceFormatProperties2);
+    GETADDR(GetPhysicalDeviceImageFormatProperties2);
     GETADDR(EnumerateDeviceExtensionProperties);
 #if HAVE_X11_XCB
     GETADDR(CreateXcbSurfaceKHR);
