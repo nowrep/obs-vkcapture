@@ -573,12 +573,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         return false;
     }
 
-    VkImageSubresource sbr = {};
-    sbr.mipLevel = 0;
-    sbr.arrayLayer = 0;
-    sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &swap->export_layout);
-
     VkImageMemoryRequirementsInfo2 memri = {};
     memri.image = swap->export_image;
     memri.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
@@ -680,6 +674,12 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     } else {
         swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
     }
+
+    VkImageSubresource sbr = {};
+    sbr.mipLevel = 0;
+    sbr.arrayLayer = 0;
+    sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &swap->export_layout);
 
 #ifndef NDEBUG
     hlog("Got fd %d - modifier %"PRIu64, swap->dmabuf_fd, swap->dmabuf_modifier);
