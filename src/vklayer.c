@@ -682,7 +682,10 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &swap->export_layout);
 
 #ifndef NDEBUG
-    hlog("Got fd %d - modifier %"PRIu64, swap->dmabuf_fd, swap->dmabuf_modifier);
+    hlog("Got fd %d", swap->dmabuf_fd);
+    if (swap->dmabuf_modifier != DRM_FORMAT_MOD_INVALID) {
+        hlog("Got modifier %"PRIu64, swap->dmabuf_modifier);
+    }
 #endif
 
     return true;
