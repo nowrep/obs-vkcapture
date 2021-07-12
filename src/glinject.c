@@ -53,6 +53,8 @@ struct gl_data {
     void *xcb_con;
     unsigned long xpixmap;
     void *glxpixmap;
+
+    bool valid;
 };
 static struct gl_data data;
 
@@ -164,6 +166,8 @@ static bool gl_init_funcs(bool glx)
         GETEGLPROCADDR(ExportDMABUFImageMESA);
         egl_f.valid = true;
     }
+
+    data.valid = true;
 
     return true;
 }
@@ -402,6 +406,7 @@ static void gl_capture(void *display, void *surface)
     if (capture_should_init()) {
         if (!gl_init(display, surface)) {
             gl_free();
+            data.valid = false;
             hlog("gl_init failed");
         }
     }
@@ -474,7 +479,9 @@ unsigned eglSwapBuffers(void *display, void *surface)
         return 0;
     }
 
-    gl_capture(display, surface);
+    if (data.valid) {
+        gl_capture(display, surface);
+    }
 
     return egl_f.SwapBuffers(display, surface);
 }
@@ -559,7 +566,9 @@ void glXSwapBuffers(void *display, void *drawable)
         return;
     }
 
-    gl_capture(display, drawable);
+    if (data.valid) {
+        gl_capture(display, drawable);
+    }
 
     glx_f.SwapBuffers(display, drawable);
 }
@@ -570,7 +579,9 @@ int64_t glXSwapBuffersMscOML(void *display, void *drawable, int64_t target_msc, 
         return 0;
     }
 
-    gl_capture(display, drawable);
+    if (data.valid) {
+        gl_capture(display, drawable);
+    }
 
     return glx_f.SwapBuffersMscOML(display, drawable, target_msc, divisor, remainder);
 }
