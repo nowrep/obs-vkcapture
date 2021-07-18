@@ -40,6 +40,7 @@ if (BUILD_PLUGIN)
     add_library(linux-vkcapture MODULE ${PLUGIN_SOURCES})
     target_link_libraries(linux-vkcapture libobs obs-frontend-api ${X11_xcb_LIB} ${X11_xcb_xfixes_LIB})
     set_target_properties(linux-vkcapture PROPERTIES PREFIX "")
+    set_target_properties(linux-vkcapture PROPERTIES C_STANDARD 11)
     target_include_directories(linux-vkcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
     if (COMMAND install_obs_plugin_with_data)

@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #ifndef DRM_FORMAT_XRGB8888
 #define fourcc_code(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | \
@@ -30,15 +31,19 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #endif
 
 struct capture_texture_data {
-    int width;
-    int height;
-    int format;
-    int stride;
-    int offset;
+    int32_t width;
+    int32_t height;
+    int32_t format;
+    int32_t stride;
+    int32_t offset;
     uint64_t modifier;
     uint32_t winid;
-    bool flip;
-};
+    uint8_t flip;
+    uint8_t padding[256];
+} __attribute__((packed));
+
+#define CAPTURE_TEXTURE_DATA_SIZE 289
+static_assert(sizeof(struct capture_texture_data) == CAPTURE_TEXTURE_DATA_SIZE, "size mismatch");
 
 void capture_init();
 void capture_update_socket();
