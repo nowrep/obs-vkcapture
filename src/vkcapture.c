@@ -67,7 +67,7 @@ static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
         ctx->buf_fd = -1;
     }
 
-    memset(&ctx->data, 0, sizeof(struct capture_texture_data));
+    memset(&ctx->data, 0, CAPTURE_TEXTURE_DATA_SIZE);
 
 #if HAVE_X11_XCB
     ctx->root_winid = 0;
@@ -207,7 +207,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         struct msghdr msg = {0};
         struct iovec io = {
             .iov_base = &ctx->data,
-            .iov_len = sizeof(struct capture_texture_data),
+            .iov_len = CAPTURE_TEXTURE_DATA_SIZE,
         };
         msg.msg_iov = &io;
         msg.msg_iovlen = 1;
@@ -230,7 +230,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 vkcapture_cleanup_client(ctx);
                 return;
             }
-            if (io.iov_len != sizeof(struct capture_texture_data)) {
+            if (io.iov_len != CAPTURE_TEXTURE_DATA_SIZE) {
                 return;
             }
             struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
@@ -255,9 +255,10 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             obs_enter_graphics();
             const uint32_t stride = ctx->data.stride;
             const uint32_t offset = ctx->data.offset;
+            const uint64_t modifier = ctx->data.modifier;
             ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height,
                     ctx->data.format, GS_BGRX, 1, &ctx->buf_fd, &stride, &offset,
-                    ctx->data.modifier != DRM_FORMAT_MOD_INVALID ? &ctx->data.modifier : NULL);
+                    modifier != DRM_FORMAT_MOD_INVALID ? &modifier : NULL);
             obs_leave_graphics();
 
             if (!ctx->texture) {

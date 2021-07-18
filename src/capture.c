@@ -111,7 +111,7 @@ void capture_init_shtex(
 
     struct iovec io = {
         .iov_base = &td,
-        .iov_len = sizeof(struct capture_texture_data),
+        .iov_len = CAPTURE_TEXTURE_DATA_SIZE,
     };
     msg.msg_iov = &io;
     msg.msg_iovlen = 1;
