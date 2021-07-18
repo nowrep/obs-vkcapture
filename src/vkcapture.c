@@ -121,7 +121,7 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
     struct sockaddr_un addr = {0};
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, socket_filename);
-    ctx->sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    ctx->sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
 
     int ret = bind(ctx->sockfd, (const struct sockaddr *)&addr, sizeof(addr));
     if (ret < 0) {
