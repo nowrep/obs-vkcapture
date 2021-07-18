@@ -217,6 +217,8 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         msg.msg_controllen = sizeof(cmsg_buf);
 
         while (true) {
+            int buf_fd;
+
             const ssize_t n = recvmsg(ctx->clientfd, &msg, 0);
             if (n == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -226,18 +228,30 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                     blog(LOG_ERROR, "Socket recv error: %s", strerror(errno));
                 }
             }
+
+            struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
+            if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
+                if (n <= 0) {
+                    vkcapture_cleanup_client(ctx);
+                }
+                return;
+            }
+
+            buf_fd = *((int *)CMSG_DATA(cmsgh));
+
             if (n <= 0) {
+                if (buf_fd >= 0) {
+                    close(buf_fd);
+                }
                 vkcapture_cleanup_client(ctx);
                 return;
             }
             if (io.iov_len != CAPTURE_TEXTURE_DATA_SIZE) {
-                return;
+                if (buf_fd >= 0) {
+                    close(buf_fd);
+                }
+                continue;
             }
-            struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
-            if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
-                return;
-            }
-
             if (ctx->texture) {
                 obs_enter_graphics();
                 gs_texture_destroy(ctx->texture);
@@ -247,7 +261,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 close(ctx->buf_fd);
             }
 
-            ctx->buf_fd = *((int *)CMSG_DATA(cmsgh));
+            ctx->buf_fd = buf_fd;
 
             blog(LOG_INFO, "Creating texture from dmabuf %d %dx%d stride:%d offset:%d", ctx->buf_fd,
                     ctx->data.width, ctx->data.height, ctx->data.stride, ctx->data.offset);
