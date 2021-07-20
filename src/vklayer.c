@@ -61,11 +61,13 @@ struct vk_swap_data {
     uint32_t winid;
     VkImage export_image;
     VkDeviceMemory export_mem;
-    VkSubresourceLayout export_layout;
     VkImage *swap_images;
     uint32_t image_count;
 
-    int dmabuf_fd;
+    int dmabuf_nfd;
+    int dmabuf_fds[4];
+    int dmabuf_strides[4];
+    int dmabuf_offsets[4];
     uint64_t dmabuf_modifier;
     bool captured;
 };
@@ -428,9 +430,12 @@ static void vk_shtex_free(struct vk_data *data)
             data->funcs.DestroyImage(device, swap->export_image,
                     data->ac);
 
-        if (swap->dmabuf_fd >= 0) {
-            close(swap->dmabuf_fd);
-            swap->dmabuf_fd = -1;
+        swap->dmabuf_nfd = 0;
+        for (int i = 0; i < 4; ++i) {
+            if (swap->dmabuf_fds[i] >= 0) {
+                close(swap->dmabuf_fds[i]);
+                swap->dmabuf_fds[i] = -1;
+            }
         }
 
         if (swap->export_mem)
@@ -563,10 +568,13 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.extent.height = swap->image_extent.height;
     img_info.extent.depth = 1;
     img_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    img_info.tiling = VK_IMAGE_TILING_LINEAR;
+    img_info.tiling = VK_IMAGE_TILING_OPTIMAL;
 
+    int num_planes = 1; // format itself may be multi-planar?
     uint64_t *image_modifiers = NULL;
     VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list = {};
+    struct VkDrmFormatModifierPropertiesEXT *modifier_props = NULL;
+    uint32_t modifier_prop_count = 0;
 
     if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
         VkDrmFormatModifierPropertiesListEXT modifier_props_list = {};
@@ -579,7 +587,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
                 img_info.format, &format_props);
 
-        struct VkDrmFormatModifierPropertiesEXT *modifier_props =
+        modifier_props =
             vk_alloc(data->ac, modifier_props_list.drmFormatModifierCount * sizeof(struct VkDrmFormatModifierPropertiesEXT),
                     _Alignof(struct VkDrmFormatModifierPropertiesEXT), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
@@ -588,11 +596,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
                 img_info.format, &format_props);
 
-        uint32_t modifier_prop_count = 0;
         for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
-            if (modifier_props[i].drmFormatModifierPlaneCount != 1) {
-                continue;
-            }
             VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {};
             mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
             mod_info.drmFormatModifier = modifier_props[i].drmFormatModifier;
@@ -634,8 +638,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         } else {
             hlog("No suitable DRM modifier found!");
         }
-
-        vk_free(data->ac, modifier_props);
     }
 
     VkDevice device = data->device;
@@ -721,11 +723,12 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         return false;
     }
 
+    int fd = -1;
     VkMemoryGetFdInfoKHR gfdi = {};
     gfdi.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
     gfdi.memory = swap->export_mem;
     gfdi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-    res = funcs->GetMemoryFdKHR(device, &gfdi, &swap->dmabuf_fd);
+    res = funcs->GetMemoryFdKHR(device, &gfdi, &fd);
     if (VK_SUCCESS != res) {
         hlog("GetMemoryFdKHR failed %s", result_to_str(res));
         funcs->DestroyImage(device, swap->export_image, data->ac);
@@ -742,19 +745,48 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
         } else {
             swap->dmabuf_modifier = image_mod_props.drmFormatModifier;
+            for (uint32_t i = 0; i < modifier_prop_count; ++i) {
+                if (modifier_props[i].drmFormatModifier == swap->dmabuf_modifier) {
+                    num_planes = modifier_props[i].drmFormatModifierPlaneCount;
+                    break;
+                }
+            }
         }
+        vk_free(data->ac, modifier_props);
     } else {
         swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
     }
 
-    VkImageSubresource sbr = {};
-    sbr.mipLevel = 0;
-    sbr.arrayLayer = 0;
-    sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &swap->export_layout);
+    if (num_planes > 1) {
+        for (int i = 0; i < num_planes; i++) {
+            VkImageSubresource sbr = {};
+            sbr.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+            sbr.mipLevel = 0;
+            sbr.arrayLayer = 0;
+            VkSubresourceLayout layout;
+            funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &layout);
+
+            swap->dmabuf_fds[i] = i == 0 ? fd : dup(fd);
+            swap->dmabuf_strides[i] = layout.rowPitch;
+            swap->dmabuf_offsets[i] = layout.offset;
+        }
+        swap->dmabuf_nfd = num_planes;
+    } else {
+        VkImageSubresource sbr = {};
+        sbr.mipLevel = 0;
+        sbr.arrayLayer = 0;
+        sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        VkSubresourceLayout layout;
+        funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &layout);
+
+        swap->dmabuf_nfd = 1;
+        swap->dmabuf_fds[0] = fd;
+        swap->dmabuf_strides[0] = layout.rowPitch;
+        swap->dmabuf_offsets[0] = layout.offset;
+    }
 
 #ifndef NDEBUG
-    hlog("Got fd %d", swap->dmabuf_fd);
+    hlog("Got planes %d fd %d", swap->dmabuf_nfd, swap->dmabuf_fds[0]);
     if (swap->dmabuf_modifier != DRM_FORMAT_MOD_INVALID) {
         hlog("Got modifier %"PRIu64, swap->dmabuf_modifier);
     }
@@ -771,13 +803,9 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 
     data->cur_swap = swap;
 
-    int strides[4] = { swap->export_layout.rowPitch, 0, 0, 0 };
-    int offsets[4] = { swap->export_layout.offset, 0, 0, 0 };
-    int fds[4] = { swap->dmabuf_fd, 0, 0, 0 };
-
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
-        strides, offsets, swap->dmabuf_modifier,
-        swap->winid, /*flip*/false, 1, fds);
+        swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
+        swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;
@@ -1576,7 +1604,8 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
             swap_data->export_image = VK_NULL_HANDLE;
             swap_data->export_mem = VK_NULL_HANDLE;
             swap_data->image_count = count;
-            swap_data->dmabuf_fd = -1;
+            swap_data->dmabuf_nfd = 0;
+            memset(swap_data->dmabuf_fds, -1, sizeof(swap_data->dmabuf_fds));
             swap_data->captured = false;
         }
     }
