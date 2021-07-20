@@ -93,16 +93,17 @@ void capture_update_socket()
 }
 
 void capture_init_shtex(
-        int width, int height, int format, int stride,
-        int offset, uint64_t modifier, uint32_t winid,
-        bool flip, int fd)
+        int width, int height, int format, int strides[4],
+        int offsets[4], uint64_t modifier, uint32_t winid,
+        bool flip, int nfd, int fds[4])
 {
     struct capture_texture_data td;
+    td.nfd = nfd;
     td.width = width;
     td.height = height;
     td.format = format;
-    td.stride = stride;
-    td.offset = offset;
+    memcpy(td.strides, strides, sizeof(int) * nfd);
+    memcpy(td.offsets, offsets, sizeof(int) * nfd);
     td.modifier = modifier;
     td.winid = winid;
     td.flip = flip;
@@ -116,14 +117,14 @@ void capture_init_shtex(
     msg.msg_iov = &io;
     msg.msg_iovlen = 1;
 
-    char cmsg_buf[CMSG_SPACE(sizeof(int))];
+    char cmsg_buf[CMSG_SPACE(sizeof(int) * 4)];
     msg.msg_control = cmsg_buf;
-    msg.msg_controllen = CMSG_SPACE(sizeof(int));
+    msg.msg_controllen = CMSG_SPACE(sizeof(int) * nfd);
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
     cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
-    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-    memcpy(CMSG_DATA(cmsg), &fd, sizeof(int));
+    cmsg->cmsg_len = CMSG_LEN(sizeof(int) * nfd);
+    memcpy(CMSG_DATA(cmsg), fds, sizeof(int) * nfd);
 
     const ssize_t sent = sendmsg(data.connfd, &msg, 0);
     if (sent < 0) {

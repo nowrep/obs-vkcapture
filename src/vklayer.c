@@ -771,9 +771,13 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 
     data->cur_swap = swap;
 
+    int strides[4] = { swap->export_layout.rowPitch, 0, 0, 0 };
+    int offsets[4] = { swap->export_layout.offset, 0, 0, 0 };
+    int fds[4] = { swap->dmabuf_fd, 0, 0, 0 };
+
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
-        swap->export_layout.rowPitch, swap->export_layout.offset, swap->dmabuf_modifier,
-        swap->winid, /*flip*/false, swap->dmabuf_fd);
+        strides, offsets, swap->dmabuf_modifier,
+        swap->winid, /*flip*/false, 1, fds);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;

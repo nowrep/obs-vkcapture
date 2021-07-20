@@ -30,4 +30,3 @@ AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
 * Only supports capturing one game at a time
 * Requires VK_EXT_external_memory_dma_buf - not available in NVIDIA proprietary driver
-* GLX requires DRI3 buffer_from_pixmap - not available on XWayland

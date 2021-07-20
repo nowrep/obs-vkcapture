@@ -43,11 +43,12 @@ struct gl_data {
     GLuint texture;
     void *image;
     int buf_fourcc;
-    int buf_offset;
-    int buf_stride;
+    int buf_strides[4];
+    int buf_offsets[4];
     uint64_t buf_modifier;
     uint32_t winid;
-    int buf_fd;
+    int nfd;
+    int buf_fds[4];
 
     bool glx;
     void *xcb_con;
@@ -100,7 +101,7 @@ static bool gl_init_funcs(bool glx)
 
     capture_init();
     memset(&data, 0, sizeof(struct gl_data));
-    data.buf_fd = -1;
+    memset(data.buf_fds, -1, sizeof(data.buf_fds));
     data.glx = glx;
 
     if (glx) {
@@ -144,9 +145,11 @@ static bool gl_init_funcs(bool glx)
             hlog("Failed to open libxcb-dri3.so.0");
             return false;
         }
-        GETXADDR(xcb_dri3_buffer_from_pixmap);
-        GETXADDR(xcb_dri3_buffer_from_pixmap_reply);
-        GETXADDR(xcb_dri3_buffer_from_pixmap_reply_fds);
+        GETXADDR(xcb_dri3_buffers_from_pixmap);
+        GETXADDR(xcb_dri3_buffers_from_pixmap_reply);
+        GETXADDR(xcb_dri3_buffers_from_pixmap_reply_fds);
+        GETXADDR(xcb_dri3_buffers_from_pixmap_strides);
+        GETXADDR(xcb_dri3_buffers_from_pixmap_offsets);
         x11_f.valid = true;
     } else {
         void *handle = dlopen("libEGL.so.1", RTLD_LAZY);
@@ -197,11 +200,14 @@ static void gl_free()
         return;
     }
 
-    const bool was_capturing = data.buf_fd >= 0;
+    const bool was_capturing = data.nfd;
 
-    if (data.buf_fd >= 0) {
-        close(data.buf_fd);
-        data.buf_fd = -1;
+    if (data.nfd) {
+        for (int i = 0; i < data.nfd; ++i) {
+            close(data.buf_fds[i]);
+            data.buf_fds[i] = -1;
+        }
+        data.nfd = 0;
     }
 
     if (data.image) {
@@ -316,22 +322,20 @@ static bool gl_shtex_init()
 
         glx_f.BindTexImageEXT(data.display, data.glxpixmap, P_GLX_FRONT_LEFT_EXT, NULL);
 
-        void *cookie = x11_f.xcb_dri3_buffer_from_pixmap(data.xcb_con, data.xpixmap);
-        P_xcb_dri3_buffer_from_pixmap_reply_t *reply = x11_f.xcb_dri3_buffer_from_pixmap_reply(data.xcb_con, cookie, NULL);
+        void *cookie = x11_f.xcb_dri3_buffers_from_pixmap(data.xcb_con, data.xpixmap);
+        P_xcb_dri3_buffers_from_pixmap_reply_t *reply = x11_f.xcb_dri3_buffers_from_pixmap_reply(data.xcb_con, cookie, NULL);
         if (!reply) {
             hlog("Failed to get buffer from pixmap");
             return false;
         }
-        if (reply->nfd != 1) {
-            hlog("Expected 1 fd, got %d", reply->nfd);
-            free(reply);
-            return false;
+        data.nfd = reply->nfd;
+        for (uint8_t i = 0; i < reply->nfd; ++i) {
+            data.buf_fds[i] = x11_f.xcb_dri3_buffers_from_pixmap_reply_fds(data.xcb_con, reply)[i];
+            data.buf_strides[i] = x11_f.xcb_dri3_buffers_from_pixmap_strides(reply)[i];
+            data.buf_offsets[i] = x11_f.xcb_dri3_buffers_from_pixmap_offsets(reply)[i];
         }
-        data.buf_fd = x11_f.xcb_dri3_buffer_from_pixmap_reply_fds(data.xcb_con, reply)[0];
-        data.buf_stride = reply->stride;
-        data.buf_offset = 0;
-        data.buf_fourcc = DRM_FORMAT_XRGB8888;
-        data.buf_modifier = DRM_FORMAT_MOD_INVALID;
+        data.buf_fourcc = reply->bpp == 24 ? DRM_FORMAT_XRGB8888 : DRM_FORMAT_ARGB8888;
+        data.buf_modifier = reply->modifier;
         free(reply);
     } else {
         data.image = egl_f.CreateImage(data.display, egl_f.GetCurrentContext(), P_EGL_GL_TEXTURE_2D, data.texture, NULL);
@@ -339,19 +343,12 @@ static bool gl_shtex_init()
             hlog("Failed to create EGL image");
             return false;
         }
-
-        int num_planes;
-        const int queried = egl_f.ExportDMABUFImageQueryMESA(data.display, data.image, &data.buf_fourcc, &num_planes, &data.buf_modifier);
+        const int queried = egl_f.ExportDMABUFImageQueryMESA(data.display, data.image, &data.buf_fourcc, &data.nfd, &data.buf_modifier);
         if (!queried) {
             hlog("Failed to query dmabuf export");
             return false;
         }
-        if (num_planes != 1) {
-            hlog("Expected 1 plane, got %d", num_planes);
-            return false;
-        }
-
-        const int exported = egl_f.ExportDMABUFImageMESA(data.display, data.image, &data.buf_fd, &data.buf_stride, &data.buf_offset);
+        const int exported = egl_f.ExportDMABUFImageMESA(data.display, data.image, data.buf_fds, data.buf_strides, data.buf_offsets);
         if (!exported) {
             hlog("Failed dmabuf export");
             return false;
@@ -377,8 +374,8 @@ static bool gl_init(void *display, void *surface)
     }
 
     capture_init_shtex(data.width, data.height, data.buf_fourcc,
-            data.buf_stride, data.buf_offset, data.buf_modifier,
-            data.winid, /*flip*/true, data.buf_fd);
+            data.buf_strides, data.buf_offsets, data.buf_modifier,
+            data.winid, /*flip*/true, data.nfd, data.buf_fds);
 
     hlog("------------------ opengl capture started ------------------");
 

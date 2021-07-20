@@ -126,19 +126,19 @@ typedef struct
 }
 *P_XPrivDisplay;
 
-typedef struct P_xcb_dri3_buffer_from_pixmap_reply_t {
+typedef struct P_xcb_dri3_buffers_from_pixmap_reply_t {
     uint8_t  response_type;
     uint8_t  nfd;
     uint16_t sequence;
     uint32_t length;
-    uint32_t size;
     uint16_t width;
     uint16_t height;
-    uint16_t stride;
+    uint8_t  pad0[4];
+    uint64_t modifier;
     uint8_t  depth;
     uint8_t  bpp;
-    uint8_t  pad0[12];
-} P_xcb_dri3_buffer_from_pixmap_reply_t;
+    uint8_t  pad1[6];
+} P_xcb_dri3_buffers_from_pixmap_reply_t;
 
 struct x11_funcs {
     unsigned long (*XCreatePixmap)(void *display, unsigned long drawable, unsigned width, unsigned height, unsigned depth);
@@ -147,9 +147,11 @@ struct x11_funcs {
 
     void *(*xcb_connect)(const char *displayname, int *screenp);
     void (*xcb_disconnect)(void *c);
-    void *(*xcb_dri3_buffer_from_pixmap)(void *c, unsigned long pixmap);
-    P_xcb_dri3_buffer_from_pixmap_reply_t *(*xcb_dri3_buffer_from_pixmap_reply)(void *c, void *cookie, void *error);
-    int *(*xcb_dri3_buffer_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffer_from_pixmap_reply_t *reply);
+    void *(*xcb_dri3_buffers_from_pixmap)(void *c, unsigned long pixmap);
+    P_xcb_dri3_buffers_from_pixmap_reply_t *(*xcb_dri3_buffers_from_pixmap_reply)(void *c, void *cookie, void *error);
+    int *(*xcb_dri3_buffers_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
+    uint32_t *(*xcb_dri3_buffers_from_pixmap_strides)(P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
+    uint32_t *(*xcb_dri3_buffers_from_pixmap_offsets)(P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
 
     bool valid;
 };
