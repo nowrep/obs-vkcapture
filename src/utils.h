@@ -35,4 +35,9 @@ static inline void os_socket_block(int s, bool block)
     }
 }
 
+static inline int os_dupfd_cloexec(int fd)
+{
+    return fcntl(fd, F_DUPFD_CLOEXEC, 3);
+}
+
 #define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)

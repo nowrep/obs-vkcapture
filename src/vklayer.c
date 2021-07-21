@@ -766,7 +766,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             VkSubresourceLayout layout;
             funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &layout);
 
-            swap->dmabuf_fds[i] = i == 0 ? fd : dup(fd);
+            swap->dmabuf_fds[i] = i == 0 ? fd : os_dupfd_cloexec(fd);
             swap->dmabuf_strides[i] = layout.rowPitch;
             swap->dmabuf_offsets[i] = layout.offset;
         }
