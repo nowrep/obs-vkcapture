@@ -568,7 +568,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.extent.height = swap->image_extent.height;
     img_info.extent.depth = 1;
     img_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    img_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    img_info.tiling = VK_IMAGE_TILING_LINEAR;
 
     int num_planes = 1; // format itself may be multi-planar?
     uint64_t *image_modifiers = NULL;
