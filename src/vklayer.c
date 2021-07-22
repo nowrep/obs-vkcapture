@@ -1425,7 +1425,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     dfuncs->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)
         gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
     if (!dfuncs->GetImageDrmFormatModifierPropertiesEXT) {
-        hlog("DRM format modifiers support not available");
+        hlog("DRM format modifier support not available");
     }
 
 #undef GETADDR
