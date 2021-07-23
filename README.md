@@ -35,4 +35,4 @@ AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
 **Cannot create EGLImage: Arguments are inconsistent**
 
-If you get this error with Vulkan capture, try starting the game with `VKCAPTURE_LINEAR=1` environment variable.
+If you get this error with Vulkan capture, try starting the game with `OBS_VKCAPTURE_LINEAR=1` environment variable.

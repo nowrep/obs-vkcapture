@@ -1806,7 +1806,7 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInt
         capture_init();
 
         vulkan_seen = true;
-        vkcapture_linear = getenv("VKCAPTURE_LINEAR");
+        vkcapture_linear = getenv("OBS_VKCAPTURE_LINEAR");
     }
 
     return VK_SUCCESS;
