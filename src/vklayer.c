@@ -40,6 +40,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 static bool vulkan_seen = false;
 
+static bool vkcapture_linear = false;
+
 /* ======================================================================== */
 /* hook data                                                                */
 
@@ -597,6 +599,9 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
                 img_info.format, &format_props);
 
         for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
+            if (vkcapture_linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
+                continue;
+            }
             VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {};
             mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
             mod_info.drmFormatModifier = modifier_props[i].drmFormatModifier;
@@ -1801,6 +1806,7 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInt
         capture_init();
 
         vulkan_seen = true;
+        vkcapture_linear = getenv("VKCAPTURE_LINEAR");
     }
 
     return VK_SUCCESS;
