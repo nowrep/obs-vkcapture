@@ -598,7 +598,15 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
                 img_info.format, &format_props);
 
+#ifndef NDEBUG
+        hlog("Available modifiers:");
+#endif
         for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
+#ifndef NDEBUG
+            hlog(" %d: modifier:%"PRIu64" planes:%d", i,
+                    modifier_props[i].drmFormatModifier,
+                    modifier_props[i].drmFormatModifierPlaneCount);
+#endif
             if (vkcapture_linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
                 continue;
             }
