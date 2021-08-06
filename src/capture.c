@@ -62,11 +62,12 @@ void capture_init()
 
 void capture_update_socket()
 {
-    static int limiter = 0;
-    if (++limiter < 60) {
+    static int64_t last_check = 0;
+    const int64_t now = os_time_get_nano();
+    if (now - last_check < 1000000000) {
         return;
     }
-    limiter = 0;
+    last_check = now;
 
     if (data.connfd < 0 && !capture_try_connect()) {
         return;

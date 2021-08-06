@@ -21,10 +21,27 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <time.h>
 
 static inline int os_dupfd_cloexec(int fd)
 {
     return fcntl(fd, F_DUPFD_CLOEXEC, 3);
+}
+
+static inline int64_t os_time_get_nano(void)
+{
+    struct timespec tv;
+    clock_gettime(
+#if defined(CLOCK_MONOTONIC_RAW)
+        CLOCK_MONOTONIC_RAW
+#elif defined(CLOCK_MONOTONIC_FAST)
+        CLOCK_MONOTONIC_FAST
+#else
+        CLOCK_MONOTONIC
+#endif
+        , &tv);
+    return tv.tv_nsec + tv.tv_sec * INT64_C(1000000000);
 }
 
 #define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)
