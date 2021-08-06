@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#define _GNU_SOURCE
+
 #include <obs-module.h>
 #include <obs-nix-platform.h>
 
@@ -126,7 +128,7 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
     struct sockaddr_un addr = {0};
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, socket_filename);
-    ctx->sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    ctx->sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
 
     int ret = bind(ctx->sockfd, (const struct sockaddr *)&addr, sizeof(addr));
     if (ret < 0) {
@@ -141,7 +143,6 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
         vkcapture_source_destroy(ctx);
         return NULL;
     }
-    os_socket_block(ctx->sockfd, false);
 
 #if HAVE_X11_XCB
     if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
@@ -193,9 +194,8 @@ static void vkcapture_source_video_tick(void *data, float seconds)
 #endif
 
     if (ctx->clientfd < 0) {
-        ctx->clientfd = accept(ctx->sockfd, NULL, NULL);
+        ctx->clientfd = accept4(ctx->sockfd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
         if (ctx->clientfd >= 0) {
-            os_socket_block(ctx->clientfd, false);
             char b = '1';
             ssize_t ret = write(ctx->clientfd, &b, 1);
             if (ret != 1) {

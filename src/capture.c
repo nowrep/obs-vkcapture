@@ -42,14 +42,13 @@ static bool capture_try_connect()
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, sockname);
-    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    int sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
     int ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
     if (ret == -1) {
         close(sock);
         return false;
     }
 
-    os_socket_block(sock, false);
     data.connfd = sock;
     return true;
 }

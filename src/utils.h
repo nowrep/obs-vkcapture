@@ -22,19 +22,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <stdio.h>
 #include <stdbool.h>
 
-static inline void os_socket_block(int s, bool block)
-{
-    int old = fcntl(s, F_GETFL, 0);
-    if (old == -1) {
-        return;
-    }
-    if (block) {
-        fcntl(s, F_SETFL, old & ~O_NONBLOCK);
-    } else {
-        fcntl(s, F_SETFL, old | O_NONBLOCK);
-    }
-}
-
 static inline int os_dupfd_cloexec(int fd)
 {
     return fcntl(fd, F_DUPFD_CLOEXEC, 3);
