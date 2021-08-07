@@ -122,6 +122,7 @@ void capture_update_socket()
     if (n <= 0) {
         close(data.connfd);
         data.connfd = -1;
+        data.accepted = false;
     }
 }
 
@@ -170,7 +171,6 @@ void capture_init_shtex(
 
 void capture_stop()
 {
-    data.accepted = false;
     data.capturing = false;
 }
 
