@@ -32,7 +32,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define DRM_FORMAT_MOD_LINEAR fourcc_mod_code(0, 0)
 #endif
 
+struct capture_client_data {
+    uint8_t type;
+    char exe[48];
+    uint8_t padding[79];
+} __attribute__((packed));
+
+#define CAPTURE_CLIENT_DATA_TYPE 10
+#define CAPTURE_CLIENT_DATA_SIZE 128
+static_assert(sizeof(struct capture_client_data) == CAPTURE_CLIENT_DATA_SIZE, "size mismatch");
+
 struct capture_texture_data {
+    uint8_t type;
     uint8_t nfd;
     int32_t width;
     int32_t height;
@@ -42,9 +53,10 @@ struct capture_texture_data {
     uint64_t modifier;
     uint32_t winid;
     uint8_t flip;
-    uint8_t padding[70];
+    uint8_t padding[69];
 } __attribute__((packed));
 
+#define CAPTURE_TEXTURE_DATA_TYPE 11
 #define CAPTURE_TEXTURE_DATA_SIZE 128
 static_assert(sizeof(struct capture_texture_data) == CAPTURE_TEXTURE_DATA_SIZE, "size mismatch");
 

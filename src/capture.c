@@ -22,6 +22,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <limits.h>
+#include <libgen.h>
 #include <sys/un.h>
 #include <sys/socket.h>
 
@@ -30,6 +32,19 @@ struct {
     bool accepted;
     bool capturing;
 } data;
+
+static bool get_exe(char *buf, size_t bufsize)
+{
+    char exe[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", exe, PATH_MAX);
+    if (n <= 0) {
+        return false;
+    }
+    exe[n] = '\0';
+    strncpy(buf, basename(exe), bufsize);
+    buf[bufsize - 1] = '\0';
+    return true;
+}
 
 static bool capture_try_connect()
 {
@@ -50,6 +65,24 @@ static bool capture_try_connect()
     }
 
     data.connfd = sock;
+
+    struct capture_client_data cd;
+    cd.type = CAPTURE_CLIENT_DATA_TYPE;
+    get_exe(cd.exe, sizeof(cd.exe));
+
+    struct msghdr msg = {0};
+    struct iovec io = {
+        .iov_base = &cd,
+        .iov_len = CAPTURE_CLIENT_DATA_SIZE,
+    };
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
+
+    const ssize_t sent = sendmsg(data.connfd, &msg, MSG_NOSIGNAL);
+    if (sent < 0) {
+        hlog("Socket sendmsg error %s", strerror(errno));
+    }
+
     return true;
 }
 
@@ -98,6 +131,7 @@ void capture_init_shtex(
         bool flip, int nfd, int fds[4])
 {
     struct capture_texture_data td;
+    td.type = CAPTURE_TEXTURE_DATA_TYPE;
     td.nfd = nfd;
     td.width = width;
     td.height = height;
@@ -126,7 +160,7 @@ void capture_init_shtex(
     cmsg->cmsg_len = CMSG_LEN(sizeof(int) * nfd);
     memcpy(CMSG_DATA(cmsg), fds, sizeof(int) * nfd);
 
-    const ssize_t sent = sendmsg(data.connfd, &msg, 0);
+    const ssize_t sent = sendmsg(data.connfd, &msg, MSG_NOSIGNAL);
     if (sent < 0) {
         hlog("Socket sendmsg error %s", strerror(errno));
     }

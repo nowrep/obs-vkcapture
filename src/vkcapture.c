@@ -46,7 +46,8 @@ typedef struct {
 #endif
     bool show_cursor;
 
-    struct capture_texture_data data;
+    struct capture_client_data cdata;
+    struct capture_texture_data tdata;
     int buf_fds[4];
     int sockfd;
     int clientfd;
@@ -74,7 +75,8 @@ static void vkcapture_cleanup_client(vkcapture_source_t *ctx)
         }
     }
 
-    memset(&ctx->data, 0, CAPTURE_TEXTURE_DATA_SIZE);
+    memset(&ctx->cdata, 0, CAPTURE_CLIENT_DATA_SIZE);
+    memset(&ctx->tdata, 0, CAPTURE_TEXTURE_DATA_SIZE);
 
 #if HAVE_X11_XCB
     ctx->root_winid = 0;
@@ -165,8 +167,8 @@ static void vkcapture_source_video_tick(void *data, float seconds)
 
 #if HAVE_X11_XCB
     if (ctx->texture && ctx->show_cursor && ctx->cursor && obs_source_showing(ctx->source)) {
-        if (!ctx->root_winid && ctx->data.winid) {
-            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->data.winid);
+        if (!ctx->root_winid && ctx->tdata.winid) {
+            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->tdata.winid);
             xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
             if (tre_r) {
                 ctx->root_winid = tre_r->root;
@@ -174,12 +176,12 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             }
         }
         xcb_translate_coordinates_cookie_t tr_c;
-        if (ctx->root_winid && ctx->data.winid) {
-            tr_c = xcb_translate_coordinates_unchecked(ctx->xcb, ctx->data.winid, ctx->root_winid, 0, 0);
+        if (ctx->root_winid && ctx->tdata.winid) {
+            tr_c = xcb_translate_coordinates_unchecked(ctx->xcb, ctx->tdata.winid, ctx->root_winid, 0, 0);
         }
         xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(ctx->xcb);
         xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
-        if (ctx->root_winid && ctx->data.winid) {
+        if (ctx->root_winid && ctx->tdata.winid) {
             xcb_translate_coordinates_reply_t *tr_r = xcb_translate_coordinates_reply(ctx->xcb, tr_c, NULL);
             if (tr_r) {
                 xcb_xcursor_offset(ctx->cursor, tr_r->dst_x, tr_r->dst_y);
@@ -209,9 +211,10 @@ static void vkcapture_source_video_tick(void *data, float seconds)
     }
 
     if (ctx->clientfd >= 0) {
+        uint8_t buf[CAPTURE_TEXTURE_DATA_SIZE];
         struct msghdr msg = {0};
         struct iovec io = {
-            .iov_base = &ctx->data,
+            .iov_base = buf,
             .iov_len = CAPTURE_TEXTURE_DATA_SIZE,
         };
         msg.msg_iov = &io;
@@ -222,7 +225,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         msg.msg_controllen = sizeof(cmsg_buf);
 
         while (true) {
-            const ssize_t n = recvmsg(ctx->clientfd, &msg, 0);
+            const ssize_t n = recvmsg(ctx->clientfd, &msg, MSG_NOSIGNAL);
             if (n == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     return;
@@ -231,66 +234,79 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                     blog(LOG_ERROR, "Socket recv error: %s", strerror(errno));
                 }
             }
-
-            struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
-            if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
-                if (n <= 0) {
-                    vkcapture_cleanup_client(ctx);
-                }
-                return;
-            }
-
-            const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
-
-            int buf_fds[4];
-            memset(buf_fds, -1, sizeof(buf_fds));
-            for (size_t i = 0; i < nfd; ++i) {
-                buf_fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
-            }
-
-            if (n <= 0 || io.iov_len != CAPTURE_TEXTURE_DATA_SIZE || ctx->data.nfd != nfd) {
-                for (size_t i = 0; i < nfd; ++i) {
-                    close(buf_fds[i]);
-                }
+            if (n <= 0) {
                 vkcapture_cleanup_client(ctx);
                 return;
             }
 
-            if (ctx->texture) {
-                obs_enter_graphics();
-                gs_texture_destroy(ctx->texture);
-                obs_leave_graphics();
-            }
-
-            for (int i = 0; i < 4; ++i) {
-                if (ctx->buf_fds[i] >= 0) {
-                    close(ctx->buf_fds[i]);
-                    ctx->buf_fds[i] = -1;
+            if (buf[0] == CAPTURE_CLIENT_DATA_TYPE) {
+                if (io.iov_len != CAPTURE_CLIENT_DATA_SIZE) {
+                    vkcapture_cleanup_client(ctx);
+                    return;
                 }
-            }
+                memcpy(&ctx->cdata, buf, CAPTURE_CLIENT_DATA_SIZE);
+                return;
+            } else if (buf[0] == CAPTURE_TEXTURE_DATA_TYPE) {
+                memcpy(&ctx->tdata, buf, CAPTURE_TEXTURE_DATA_SIZE);
 
-            blog(LOG_INFO, "Creating texture from dmabuf %dx%d modifier:%" PRIu64,
-                    ctx->data.width, ctx->data.height, ctx->data.modifier);
+                struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
+                if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
+                    vkcapture_cleanup_client(ctx);
+                    return;
+                }
 
-            uint32_t strides[4];
-            uint32_t offsets[4];
-            uint64_t modifiers[4];
-            for (uint8_t i = 0; i < ctx->data.nfd; ++i) {
-                strides[i] = ctx->data.strides[i];
-                offsets[i] = ctx->data.offsets[i];
-                modifiers[i] = ctx->data.modifier;
-                ctx->buf_fds[i] = buf_fds[i];
-                blog(LOG_INFO, " [%d] fd:%d stride:%d offset:%d", i, buf_fds[i], strides[i], offsets[i]);
-            }
+                const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
 
-            obs_enter_graphics();
-            ctx->texture = gs_texture_create_from_dmabuf(ctx->data.width, ctx->data.height,
-                    ctx->data.format, GS_BGRX, ctx->data.nfd, buf_fds, strides, offsets,
-                    ctx->data.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
-            obs_leave_graphics();
+                int buf_fds[4];
+                memset(buf_fds, -1, sizeof(buf_fds));
+                for (size_t i = 0; i < nfd; ++i) {
+                    buf_fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
+                }
 
-            if (!ctx->texture) {
-                blog(LOG_ERROR, "Could not create texture from dmabuf source");
+                if (io.iov_len != CAPTURE_TEXTURE_DATA_SIZE || ctx->tdata.nfd != nfd) {
+                    for (size_t i = 0; i < nfd; ++i) {
+                        close(buf_fds[i]);
+                    }
+                    vkcapture_cleanup_client(ctx);
+                    return;
+                }
+
+                if (ctx->texture) {
+                    obs_enter_graphics();
+                    gs_texture_destroy(ctx->texture);
+                    obs_leave_graphics();
+                }
+
+                for (int i = 0; i < 4; ++i) {
+                    if (ctx->buf_fds[i] >= 0) {
+                        close(ctx->buf_fds[i]);
+                        ctx->buf_fds[i] = -1;
+                    }
+                }
+
+                blog(LOG_INFO, "Creating texture from dmabuf %dx%d modifier:%" PRIu64,
+                        ctx->tdata.width, ctx->tdata.height, ctx->tdata.modifier);
+
+                uint32_t strides[4];
+                uint32_t offsets[4];
+                uint64_t modifiers[4];
+                for (uint8_t i = 0; i < ctx->tdata.nfd; ++i) {
+                    strides[i] = ctx->tdata.strides[i];
+                    offsets[i] = ctx->tdata.offsets[i];
+                    modifiers[i] = ctx->tdata.modifier;
+                    ctx->buf_fds[i] = buf_fds[i];
+                    blog(LOG_INFO, " [%d] fd:%d stride:%d offset:%d", i, buf_fds[i], strides[i], offsets[i]);
+                }
+
+                obs_enter_graphics();
+                ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
+                        ctx->tdata.format, GS_BGRX, ctx->tdata.nfd, buf_fds, strides, offsets,
+                        ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
+                obs_leave_graphics();
+
+                if (!ctx->texture) {
+                    blog(LOG_ERROR, "Could not create texture from dmabuf source");
+                }
             }
         }
     }
@@ -309,7 +325,7 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     gs_effect_set_texture(image, ctx->texture);
 
-    gs_draw_sprite(ctx->texture, ctx->data.flip ? GS_FLIP_V : 0, 0, 0);
+    gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
 
 #if HAVE_X11_XCB
     if (ctx->show_cursor && ctx->cursor) {
@@ -326,13 +342,13 @@ static const char *vkcapture_source_get_name(void *data)
 static uint32_t vkcapture_source_get_width(void *data)
 {
     const vkcapture_source_t *ctx = data;
-    return ctx->data.width;
+    return ctx->tdata.width;
 }
 
 static uint32_t vkcapture_source_get_height(void *data)
 {
     const vkcapture_source_t *ctx = data;
-    return ctx->data.height;
+    return ctx->tdata.height;
 }
 
 static void vkcapture_source_get_defaults(obs_data_t *defaults)
