@@ -40,6 +40,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 typedef struct {
     int id;
     int sockfd;
+    int activated;
     int buf_id;
     int buf_fds[4];
     struct capture_client_data cdata;
@@ -63,6 +64,7 @@ typedef struct {
     uint32_t root_winid;
 #endif
     bool show_cursor;
+    const char *window;
 
     int buf_id;
     int client_id;
@@ -72,16 +74,26 @@ typedef struct {
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
 
+static void destroy_texture(vkcapture_source_t *ctx)
+{
+    if (!ctx->texture) {
+        return;
+    }
+
+    obs_enter_graphics();
+    gs_texture_destroy(ctx->texture);
+    obs_leave_graphics();
+    ctx->texture = NULL;
+
+    ctx->buf_id = 0;
+    memset(&ctx->tdata, 0, sizeof(ctx->tdata));
+}
+
 static void vkcapture_source_destroy(void *data)
 {
     vkcapture_source_t *ctx = data;
 
-    if (ctx->texture) {
-        obs_enter_graphics();
-        gs_texture_destroy(ctx->texture);
-        obs_leave_graphics();
-        ctx->texture = NULL;
-    }
+    destroy_texture(ctx);
 
 #if HAVE_X11_XCB
     if (ctx->cursor) {
@@ -102,6 +114,11 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
     vkcapture_source_t *ctx = data;
 
     ctx->show_cursor = obs_data_get_bool(settings, "show_cursor");
+
+    ctx->window = obs_data_get_string(settings, "window");
+    if (!strlen(ctx->window)) {
+        ctx->window = NULL;
+    }
 }
 
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
@@ -124,6 +141,39 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 
     UNUSED_PARAMETER(settings);
     return ctx;
+}
+
+static vkcapture_client_t *find_matching_client(vkcapture_source_t *ctx)
+{
+    vkcapture_client_t *client = NULL;
+    if (ctx->window) {
+        for (size_t i = 0; i < server.clients.num; i++) {
+            vkcapture_client_t *c = server.clients.array + i;
+            if (!strcmp(c->cdata.exe, ctx->window)) {
+                client = c;
+                break;
+            }
+        }
+    } else if (server.clients.num) {
+        client = server.clients.array;
+    }
+    return client;
+}
+
+static void activate_client(vkcapture_client_t *client, bool activate)
+{
+    char msg;
+    if (activate && !client->activated++) {
+        msg = '1';
+    } else if (!activate && !--client->activated) {
+        msg = '0';
+    } else {
+        return;
+    }
+    ssize_t ret = write(client->sockfd, &msg, 1);
+    if (ret != 1) {
+        blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
+    }
 }
 
 static void vkcapture_source_video_tick(void *data, float seconds)
@@ -172,22 +222,10 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             }
         }
         if (!client) {
-            ctx->buf_id = 0;
             ctx->client_id = 0;
-            memset(&ctx->tdata, 0, sizeof(ctx->tdata));
-            if (ctx->texture) {
-                obs_enter_graphics();
-                gs_texture_destroy(ctx->texture);
-                obs_leave_graphics();
-                ctx->texture = NULL;
-            }
+            destroy_texture(ctx);
         } else if (ctx->buf_id != client->buf_id) {
-            if (ctx->texture) {
-                obs_enter_graphics();
-                gs_texture_destroy(ctx->texture);
-                obs_leave_graphics();
-            }
-
+            destroy_texture(ctx);
             memcpy(&ctx->tdata, &client->tdata, sizeof(client->tdata));
 
             blog(LOG_INFO, "Creating texture from dmabuf %dx%d modifier:%" PRIu64,
@@ -213,16 +251,16 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 blog(LOG_ERROR, "Could not create texture from dmabuf source");
             }
             ctx->buf_id = client->buf_id;
+        } else if (client != find_matching_client(ctx)) {
+            activate_client(client, false);
+            ctx->client_id = 0;
+            destroy_texture(ctx);
         }
-    }
-
-    if (!ctx->client_id && server.clients.num) {
-        vkcapture_client_t *client = server.clients.array;
-        char b = '1';
-        ssize_t ret = write(client->sockfd, &b, 1);
-        ctx->client_id = client->id;
-        if (ret != 1) {
-            blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
+    } else {
+        vkcapture_client_t *client = find_matching_client(ctx);
+        if (client) {
+            activate_client(client, true);
+            ctx->client_id = client->id;
         }
     }
 
@@ -278,6 +316,27 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
     const vkcapture_source_t *ctx = data;
 
     obs_properties_t *props = obs_properties_create();
+
+    obs_property_t *p = obs_properties_add_list(props, "window",
+            obs_module_text("CaptureWindow"),
+            OBS_COMBO_TYPE_LIST,
+            OBS_COMBO_FORMAT_STRING);
+    obs_property_list_add_string(p, "", "");
+
+    bool window_found = false;
+    pthread_mutex_lock(&server.mutex);
+    for (size_t i = 0; i < server.clients.num; i++) {
+        vkcapture_client_t *client = server.clients.array + i;
+        obs_property_list_add_string(p, client->cdata.exe, client->cdata.exe);
+        if (ctx->window && !strcmp(client->cdata.exe, ctx->window)) {
+            window_found = true;
+        }
+    }
+    pthread_mutex_unlock(&server.mutex);
+    if (ctx->window && !window_found) {
+        obs_property_list_add_string(p, ctx->window, ctx->window);
+    }
+
 #if HAVE_X11_XCB
     if (ctx->cursor) {
         obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
