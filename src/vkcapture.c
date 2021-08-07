@@ -39,8 +39,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 typedef struct {
     int id;
     int sockfd;
+    int buf_id;
+    int buf_fds[4];
     struct capture_client_data cdata;
+    struct capture_texture_data tdata;
 } vkcapture_client_t;
+
+static struct {
+    bool quit;
+    pthread_t thread;
+    pthread_mutex_t mutex;
+    DARRAY(vkcapture_client_t) clients;
+} server;
 
 typedef struct {
     obs_source_t *source;
@@ -52,60 +62,24 @@ typedef struct {
 #endif
     bool show_cursor;
 
+    int buf_id;
+    int client_id;
     struct capture_texture_data tdata;
-    int buf_fds[4];
-    int sockfd;
 
-    int clientid;
-    int current_client;
-    DARRAY(vkcapture_client_t) clients;
 } vkcapture_source_t;
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
-
-static void vkcapture_cleanup_client(vkcapture_source_t *ctx, vkcapture_client_t *client)
-{
-    if (client->sockfd >= 0) {
-        close(client->sockfd);
-        client->sockfd = -1;
-    }
-
-    if (ctx->current_client == client->id) {
-        ctx->current_client = 0;
-        if (ctx->texture) {
-            obs_enter_graphics();
-            gs_texture_destroy(ctx->texture);
-            obs_leave_graphics();
-            ctx->texture = NULL;
-        }
-        for (int i = 0; i < 4; ++i) {
-            if (ctx->buf_fds[i] >= 0) {
-                close(ctx->buf_fds[i]);
-                ctx->buf_fds[i] = -1;
-            }
-        }
-        memset(&ctx->tdata, 0, CAPTURE_TEXTURE_DATA_SIZE);
-#if HAVE_X11_XCB
-        ctx->root_winid = 0;
-#endif
-    }
-
-    da_erase_item(ctx->clients, client);
-}
 
 static void vkcapture_source_destroy(void *data)
 {
     vkcapture_source_t *ctx = data;
 
-    while (ctx->clients.num) {
-        vkcapture_cleanup_client(ctx, ctx->clients.array);
+    if (ctx->texture) {
+        obs_enter_graphics();
+        gs_texture_destroy(ctx->texture);
+        obs_leave_graphics();
+        ctx->texture = NULL;
     }
-
-    if (ctx->sockfd >= 0) {
-        close(ctx->sockfd);
-    }
-
-    unlink(socket_filename);
 
 #if HAVE_X11_XCB
     if (ctx->cursor) {
@@ -117,8 +91,6 @@ static void vkcapture_source_destroy(void *data)
         xcb_disconnect(ctx->xcb);
     }
 #endif
-
-    da_free(ctx->clients);
 
     bfree(ctx);
 }
@@ -134,31 +106,8 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 {
     vkcapture_source_t *ctx = bzalloc(sizeof(vkcapture_source_t));
     ctx->source = source;
-    memset(ctx->buf_fds, -1, sizeof(ctx->buf_fds));
-    da_init(ctx->clients);
 
     vkcapture_source_update(ctx, settings);
-
-    unlink(socket_filename);
-
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, socket_filename);
-    ctx->sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-
-    int ret = bind(ctx->sockfd, (const struct sockaddr *)&addr, sizeof(addr));
-    if (ret < 0) {
-        blog(LOG_ERROR, "Cannot bind unix socket to %s: %d", addr.sun_path, errno);
-        vkcapture_source_destroy(ctx);
-        return NULL;
-    }
-
-    ret = listen(ctx->sockfd, 1);
-    if (ret < 0) {
-        blog(LOG_ERROR, "Cannot listen on unix socket bound to %s: %d", addr.sun_path, errno);
-        vkcapture_source_destroy(ctx);
-        return NULL;
-    }
 
 #if HAVE_X11_XCB
     if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
@@ -209,149 +158,73 @@ static void vkcapture_source_video_tick(void *data, float seconds)
     }
 #endif
 
-    int clientfd = accept4(ctx->sockfd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
-    if (clientfd >= 0) {
-        vkcapture_client_t client;
-        memset(&client, 0, sizeof(client));
-        client.id = ++ctx->clientid;
-        client.sockfd = clientfd;
-        da_push_back(ctx->clients, &client);
+    pthread_mutex_lock(&server.mutex);
 
-        if (!ctx->current_client) {
-            char b = '1';
-            ssize_t ret = write(client.sockfd, &b, 1);
-            ctx->current_client = client.id;
-            if (ret != 1) {
-                blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
-            }
-        }
-    } else {
-        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
-            blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
-        }
-    }
-
-    for (size_t i = 0; i < ctx->clients.num; i++) {
-        vkcapture_client_t *client = ctx->clients.array + i;
-
-        uint8_t buf[CAPTURE_TEXTURE_DATA_SIZE];
-        struct msghdr msg = {0};
-        struct iovec io = {
-            .iov_base = buf,
-            .iov_len = CAPTURE_TEXTURE_DATA_SIZE,
-        };
-        msg.msg_iov = &io;
-        msg.msg_iovlen = 1;
-
-        char cmsg_buf[CMSG_SPACE(sizeof(int)) * 4];
-        msg.msg_control = cmsg_buf;
-        msg.msg_controllen = sizeof(cmsg_buf);
-
-        while (true) {
-            const ssize_t n = recvmsg(client->sockfd, &msg, MSG_NOSIGNAL);
-            if (n == -1) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;
-                }
-                if (errno != ECONNRESET) {
-                    blog(LOG_ERROR, "Socket recv error: %s", strerror(errno));
-                }
-            }
-            if (n <= 0) {
-                vkcapture_cleanup_client(ctx, client);
+    if (ctx->client_id) {
+        vkcapture_client_t *client = NULL;
+        for (size_t i = 0; i < server.clients.num; i++) {
+            vkcapture_client_t *c = server.clients.array + i;
+            if (c->id == ctx->client_id) {
+                client = c;
                 break;
             }
-
-            if (buf[0] == CAPTURE_CLIENT_DATA_TYPE) {
-                if (io.iov_len != CAPTURE_CLIENT_DATA_SIZE) {
-                    vkcapture_cleanup_client(ctx, client);
-                    break;
-                }
-                memcpy(&client->cdata, buf, CAPTURE_CLIENT_DATA_SIZE);
-                break;
-            } else if (buf[0] == CAPTURE_TEXTURE_DATA_TYPE) {
-                memcpy(&ctx->tdata, buf, CAPTURE_TEXTURE_DATA_SIZE);
-
-                struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
-                if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
-                    vkcapture_cleanup_client(ctx, client);
-                    break;
-                }
-
-                const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
-
-                int buf_fds[4];
-                memset(buf_fds, -1, sizeof(buf_fds));
-                for (size_t i = 0; i < nfd; ++i) {
-                    buf_fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
-                }
-
-                if (io.iov_len != CAPTURE_TEXTURE_DATA_SIZE || ctx->tdata.nfd != nfd) {
-                    for (size_t i = 0; i < nfd; ++i) {
-                        close(buf_fds[i]);
-                    }
-                    vkcapture_cleanup_client(ctx, client);
-                    break;
-                }
-
-                if (ctx->current_client != client->id) {
-                    for (size_t i = 0; i < nfd; ++i) {
-                        close(buf_fds[i]);
-                    }
-                    break;
-                }
-
-                if (ctx->texture) {
-                    obs_enter_graphics();
-                    gs_texture_destroy(ctx->texture);
-                    obs_leave_graphics();
-                }
-
-                for (int i = 0; i < 4; ++i) {
-                    if (ctx->buf_fds[i] >= 0) {
-                        close(ctx->buf_fds[i]);
-                        ctx->buf_fds[i] = -1;
-                    }
-                }
-
-                blog(LOG_INFO, "Creating texture from dmabuf %dx%d modifier:%" PRIu64,
-                        ctx->tdata.width, ctx->tdata.height, ctx->tdata.modifier);
-
-                uint32_t strides[4];
-                uint32_t offsets[4];
-                uint64_t modifiers[4];
-                for (uint8_t i = 0; i < ctx->tdata.nfd; ++i) {
-                    strides[i] = ctx->tdata.strides[i];
-                    offsets[i] = ctx->tdata.offsets[i];
-                    modifiers[i] = ctx->tdata.modifier;
-                    ctx->buf_fds[i] = buf_fds[i];
-                    blog(LOG_INFO, " [%d] fd:%d stride:%d offset:%d", i, buf_fds[i], strides[i], offsets[i]);
-                }
-
+        }
+        if (!client) {
+            ctx->buf_id = 0;
+            ctx->client_id = 0;
+            memset(&ctx->tdata, 0, sizeof(ctx->tdata));
+            if (ctx->texture) {
                 obs_enter_graphics();
-                ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
-                        ctx->tdata.format, GS_BGRX, ctx->tdata.nfd, buf_fds, strides, offsets,
-                        ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
+                gs_texture_destroy(ctx->texture);
                 obs_leave_graphics();
-
-                if (!ctx->texture) {
-                    blog(LOG_ERROR, "Could not create texture from dmabuf source");
-                } else {
-                    ctx->current_client = client->id;
-                }
+                ctx->texture = NULL;
             }
+        } else if (ctx->buf_id != client->buf_id) {
+            if (ctx->texture) {
+                obs_enter_graphics();
+                gs_texture_destroy(ctx->texture);
+                obs_leave_graphics();
+            }
+
+            memcpy(&ctx->tdata, &client->tdata, sizeof(client->tdata));
+
+            blog(LOG_INFO, "Creating texture from dmabuf %dx%d modifier:%" PRIu64,
+                    ctx->tdata.width, ctx->tdata.height, ctx->tdata.modifier);
+
+            uint32_t strides[4];
+            uint32_t offsets[4];
+            uint64_t modifiers[4];
+            for (uint8_t i = 0; i < ctx->tdata.nfd; ++i) {
+                strides[i] = ctx->tdata.strides[i];
+                offsets[i] = ctx->tdata.offsets[i];
+                modifiers[i] = ctx->tdata.modifier;
+                blog(LOG_INFO, " [%d] fd:%d stride:%d offset:%d", i, client->buf_fds[i], strides[i], offsets[i]);
+            }
+
+            obs_enter_graphics();
+            ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
+                    ctx->tdata.format, GS_BGRX, ctx->tdata.nfd, client->buf_fds, strides, offsets,
+                    ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
+            obs_leave_graphics();
+
+            if (!ctx->texture) {
+                blog(LOG_ERROR, "Could not create texture from dmabuf source");
+            }
+            ctx->buf_id = client->buf_id;
         }
     }
 
-    if (!ctx->current_client && ctx->clients.num) {
-        vkcapture_client_t *client = ctx->clients.array;
+    if (!ctx->client_id && server.clients.num) {
+        vkcapture_client_t *client = server.clients.array;
         char b = '1';
         ssize_t ret = write(client->sockfd, &b, 1);
-        ctx->current_client = client->id;
+        ctx->client_id = client->id;
         if (ret != 1) {
             blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
         }
     }
+
+    pthread_mutex_unlock(&server.mutex);
 
     UNUSED_PARAMETER(seconds);
 }
@@ -415,7 +288,7 @@ struct obs_source_info vkcapture_input = {
     .id = "vkcapture-source",
     .type = OBS_SOURCE_TYPE_INPUT,
     .get_name = vkcapture_source_get_name,
-    .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_DO_NOT_DUPLICATE,
+    .output_flags = OBS_SOURCE_VIDEO,
     .create = vkcapture_source_create,
     .destroy = vkcapture_source_destroy,
     .update = vkcapture_source_update,
@@ -428,6 +301,164 @@ struct obs_source_info vkcapture_input = {
     .icon_type = OBS_ICON_TYPE_GAME_CAPTURE,
 };
 
+static void server_cleanup_client(vkcapture_client_t *client)
+{
+    pthread_mutex_lock(&server.mutex);
+
+    if (client->sockfd >= 0) {
+        close(client->sockfd);
+        client->sockfd = -1;
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        if (client->buf_fds[i] >= 0) {
+            close(client->buf_fds[i]);
+            client->buf_fds[i] = -1;
+        }
+    }
+
+    da_erase_item(server.clients, client);
+
+    pthread_mutex_unlock(&server.mutex);
+}
+
+static void *server_thread_run(void *data)
+{
+    int bufid = 0;
+    int clientid = 0;
+
+    da_init(server.clients);
+
+    unlink(socket_filename);
+
+    struct sockaddr_un addr = {0};
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, socket_filename);
+    int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+
+    int ret = bind(sockfd, (const struct sockaddr *)&addr, sizeof(addr));
+    if (ret < 0) {
+        blog(LOG_ERROR, "Cannot bind unix socket to %s: %d", addr.sun_path, errno);
+        return NULL;
+    }
+
+    ret = listen(sockfd, 1);
+    if (ret < 0) {
+        blog(LOG_ERROR, "Cannot listen on unix socket bound to %s: %d", addr.sun_path, errno);
+        return NULL;
+    }
+
+    while (!server.quit) {
+        sleep(1);
+
+        int clientfd = accept4(sockfd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
+        if (clientfd >= 0) {
+            vkcapture_client_t client;
+            memset(&client, 0, sizeof(client));
+            memset(&client.buf_fds, -1, sizeof(client.buf_fds));
+            client.id = ++clientid;
+            client.sockfd = clientfd;
+            pthread_mutex_lock(&server.mutex);
+            da_push_back(server.clients, &client);
+            pthread_mutex_unlock(&server.mutex);
+        } else {
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
+                blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
+            }
+        }
+
+        for (size_t i = 0; i < server.clients.num; i++) {
+            vkcapture_client_t *client = server.clients.array + i;
+
+            uint8_t buf[CAPTURE_TEXTURE_DATA_SIZE];
+            struct msghdr msg = {0};
+            struct iovec io = {
+                .iov_base = buf,
+                .iov_len = CAPTURE_TEXTURE_DATA_SIZE,
+            };
+            msg.msg_iov = &io;
+            msg.msg_iovlen = 1;
+
+            char cmsg_buf[CMSG_SPACE(sizeof(int)) * 4];
+            msg.msg_control = cmsg_buf;
+            msg.msg_controllen = sizeof(cmsg_buf);
+
+            while (true) {
+                const ssize_t n = recvmsg(client->sockfd, &msg, MSG_NOSIGNAL);
+                if (n == -1) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        break;
+                    }
+                    if (errno != ECONNRESET) {
+                        blog(LOG_ERROR, "Socket recv error: %s", strerror(errno));
+                    }
+                }
+                if (n <= 0) {
+                    server_cleanup_client(client);
+                    break;
+                }
+
+                if (buf[0] == CAPTURE_CLIENT_DATA_TYPE) {
+                    if (io.iov_len != CAPTURE_CLIENT_DATA_SIZE) {
+                        server_cleanup_client(client);
+                        break;
+                    }
+                    pthread_mutex_lock(&server.mutex);
+                    memcpy(&client->cdata, buf, CAPTURE_CLIENT_DATA_SIZE);
+                    pthread_mutex_unlock(&server.mutex);
+                    break;
+                } else if (buf[0] == CAPTURE_TEXTURE_DATA_TYPE) {
+                    pthread_mutex_lock(&server.mutex);
+                    memcpy(&client->tdata, buf, CAPTURE_TEXTURE_DATA_SIZE);
+                    pthread_mutex_unlock(&server.mutex);
+
+                    struct cmsghdr *cmsgh = CMSG_FIRSTHDR(&msg);
+                    if (!cmsgh || cmsgh->cmsg_level != SOL_SOCKET || cmsgh->cmsg_type != SCM_RIGHTS) {
+                        server_cleanup_client(client);
+                        break;
+                    }
+
+                    const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
+
+                    int buf_fds[4];
+                    memset(buf_fds, -1, sizeof(buf_fds));
+                    for (size_t i = 0; i < nfd; ++i) {
+                        buf_fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
+                    }
+
+                    if (io.iov_len != CAPTURE_TEXTURE_DATA_SIZE || client->tdata.nfd != nfd) {
+                        for (size_t i = 0; i < nfd; ++i) {
+                            close(buf_fds[i]);
+                        }
+                        server_cleanup_client(client);
+                        break;
+                    }
+
+                    pthread_mutex_lock(&server.mutex);
+                    for (int i = 0; i < 4; ++i) {
+                        if (client->buf_fds[i] >= 0) {
+                            close(client->buf_fds[i]);
+                        }
+                        client->buf_fds[i] = buf_fds[i];
+                    }
+                    client->buf_id = ++bufid;
+                    pthread_mutex_unlock(&server.mutex);
+                }
+            }
+        }
+    }
+
+    while (server.clients.num) {
+        server_cleanup_client(server.clients.array);
+    }
+
+    close(sockfd);
+    unlink(socket_filename);
+    da_free(server.clients);
+
+    return NULL;
+}
+
 bool obs_module_load(void)
 {
     if (obs_get_nix_platform() != OBS_NIX_PLATFORM_X11_EGL && obs_get_nix_platform() != OBS_NIX_PLATFORM_WAYLAND) {
@@ -435,13 +466,22 @@ bool obs_module_load(void)
         return false;
     }
 
+    pthread_mutex_init(&server.mutex, NULL);
+    if (pthread_create(&server.thread, NULL, server_thread_run, NULL) != 0) {
+        return false;
+    }
+
     obs_register_source(&vkcapture_input);
     blog(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
+
     return true;
 }
 
 void obs_module_unload()
 {
+    server.quit = true;
+    pthread_join(server.thread, NULL);
+
     blog(LOG_INFO, "plugin unloaded");
 }
 
