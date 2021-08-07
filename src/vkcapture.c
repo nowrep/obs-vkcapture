@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <obs-nix-platform.h>
 
+#include <poll.h>
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
@@ -49,6 +50,7 @@ static struct {
     bool quit;
     pthread_t thread;
     pthread_mutex_t mutex;
+    DARRAY(struct pollfd) fds;
     DARRAY(vkcapture_client_t) clients;
 } server;
 
@@ -301,14 +303,42 @@ struct obs_source_info vkcapture_input = {
     .icon_type = OBS_ICON_TYPE_GAME_CAPTURE,
 };
 
+static void server_add_fd(int fd, int events)
+{
+    struct pollfd p;
+    p.fd = fd;
+    p.events = events;
+    da_push_back(server.fds, &p);
+}
+
+static void server_remove_fd(int fd)
+{
+    for (size_t i = 0; i < server.fds.num; ++i) {
+        struct pollfd *p = server.fds.array + i;
+        if (p->fd == fd) {
+            da_erase(server.fds, i);
+            break;
+        }
+    }
+}
+
+static bool server_has_event_on_fd(int fd)
+{
+    for (size_t i = 0; i < server.fds.num; ++i) {
+        struct pollfd *p = server.fds.array + i;
+        if (p->fd == fd && p->revents) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void server_cleanup_client(vkcapture_client_t *client)
 {
     pthread_mutex_lock(&server.mutex);
 
-    if (client->sockfd >= 0) {
-        close(client->sockfd);
-        client->sockfd = -1;
-    }
+    close(client->sockfd);
+    server_remove_fd(client->sockfd);
 
     for (int i = 0; i < 4; ++i) {
         if (client->buf_fds[i] >= 0) {
@@ -327,6 +357,7 @@ static void *server_thread_run(void *data)
     int bufid = 0;
     int clientid = 0;
 
+    da_init(server.fds);
     da_init(server.clients);
 
     unlink(socket_filename);
@@ -348,27 +379,38 @@ static void *server_thread_run(void *data)
         return NULL;
     }
 
-    while (!server.quit) {
-        sleep(1);
+    server_add_fd(sockfd, POLLIN);
 
-        int clientfd = accept4(sockfd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
-        if (clientfd >= 0) {
-            vkcapture_client_t client;
-            memset(&client, 0, sizeof(client));
-            memset(&client.buf_fds, -1, sizeof(client.buf_fds));
-            client.id = ++clientid;
-            client.sockfd = clientfd;
-            pthread_mutex_lock(&server.mutex);
-            da_push_back(server.clients, &client);
-            pthread_mutex_unlock(&server.mutex);
-        } else {
-            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
-                blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
+    while (!server.quit) {
+        int ret = poll(server.fds.array, server.fds.num, 1000);
+        if (ret <= 0) {
+            continue;
+        }
+
+        if (server_has_event_on_fd(sockfd)) {
+            int clientfd = accept4(sockfd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
+            if (clientfd >= 0) {
+                vkcapture_client_t client;
+                memset(&client, 0, sizeof(client));
+                memset(&client.buf_fds, -1, sizeof(client.buf_fds));
+                client.id = ++clientid;
+                client.sockfd = clientfd;
+                pthread_mutex_lock(&server.mutex);
+                da_push_back(server.clients, &client);
+                pthread_mutex_unlock(&server.mutex);
+                server_add_fd(client.sockfd, POLLIN);
+            } else {
+                if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
+                    blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
+                }
             }
         }
 
         for (size_t i = 0; i < server.clients.num; i++) {
             vkcapture_client_t *client = server.clients.array + i;
+            if (!server_has_event_on_fd(client->sockfd)) {
+                continue;
+            }
 
             uint8_t buf[CAPTURE_TEXTURE_DATA_SIZE];
             struct msghdr msg = {0};
@@ -455,6 +497,7 @@ static void *server_thread_run(void *data)
     close(sockfd);
     unlink(socket_filename);
     da_free(server.clients);
+    da_free(server.fds);
 
     return NULL;
 }
