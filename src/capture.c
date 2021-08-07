@@ -75,8 +75,8 @@ void capture_update_socket()
 
     char buf[1];
     ssize_t n = recv(data.connfd, buf, 1, 0);
-    if (n == 1 && buf[0] == '1') {
-        data.accepted = true;
+    if (n == 1) {
+        data.accepted = buf[0] == '1';
     }
     if (n == -1) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -138,16 +138,11 @@ void capture_stop()
 {
     data.accepted = false;
     data.capturing = false;
-
-    if (data.connfd >= 0) {
-        close(data.connfd);
-        data.connfd = -1;
-    }
 }
 
 bool capture_should_stop()
 {
-    return data.capturing && data.connfd < 0;
+    return data.capturing && (data.connfd < 0 || !data.accepted);
 }
 
 bool capture_should_init()
