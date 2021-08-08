@@ -160,6 +160,19 @@ static vkcapture_client_t *find_matching_client(vkcapture_source_t *ctx)
     return client;
 }
 
+static vkcapture_client_t *find_client_by_id(int id)
+{
+    vkcapture_client_t *client = NULL;
+    for (size_t i = 0; i < server.clients.num; i++) {
+        vkcapture_client_t *c = server.clients.array + i;
+        if (c->id == id) {
+            client = c;
+            break;
+        }
+    }
+    return client;
+}
+
 static void activate_client(vkcapture_client_t *client, bool activate)
 {
     char msg;
@@ -170,9 +183,46 @@ static void activate_client(vkcapture_client_t *client, bool activate)
     } else {
         return;
     }
+    client->buf_id = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (client->buf_fds[i] >= 0) {
+            close(client->buf_fds[i]);
+            client->buf_fds[i] = -1;
+        }
+    }
+    memset(&client->tdata, 0, sizeof(client->tdata));
     ssize_t ret = write(client->sockfd, &msg, 1);
     if (ret != 1) {
         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
+    }
+}
+
+static void vkcapture_source_show(void *data)
+{
+    vkcapture_source_t *ctx = data;
+
+    if (ctx->client_id) {
+        pthread_mutex_lock(&server.mutex);
+        vkcapture_client_t *client = find_client_by_id(ctx->client_id);
+        if (client) {
+            activate_client(client, true);
+        }
+        pthread_mutex_unlock(&server.mutex);
+    }
+}
+
+static void vkcapture_source_hide(void *data)
+{
+    vkcapture_source_t *ctx = data;
+
+    if (ctx->client_id) {
+        pthread_mutex_lock(&server.mutex);
+        vkcapture_client_t *client = find_client_by_id(ctx->client_id);
+        if (client) {
+            activate_client(client, false);
+            destroy_texture(ctx);
+        }
+        pthread_mutex_unlock(&server.mutex);
     }
 }
 
@@ -180,8 +230,12 @@ static void vkcapture_source_video_tick(void *data, float seconds)
 {
     vkcapture_source_t *ctx = data;
 
+    if (!obs_source_showing(ctx->source)) {
+        return;
+    }
+
 #if HAVE_X11_XCB
-    if (ctx->texture && ctx->show_cursor && ctx->cursor && obs_source_showing(ctx->source)) {
+    if (ctx->texture && ctx->show_cursor && ctx->cursor) {
         if (!ctx->root_winid && ctx->tdata.winid) {
             xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->tdata.winid);
             xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
@@ -213,14 +267,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
     pthread_mutex_lock(&server.mutex);
 
     if (ctx->client_id) {
-        vkcapture_client_t *client = NULL;
-        for (size_t i = 0; i < server.clients.num; i++) {
-            vkcapture_client_t *c = server.clients.array + i;
-            if (c->id == ctx->client_id) {
-                client = c;
-                break;
-            }
-        }
+        vkcapture_client_t *client = find_client_by_id(ctx->client_id);
         if (!client) {
             ctx->client_id = 0;
             destroy_texture(ctx);
@@ -353,6 +400,8 @@ struct obs_source_info vkcapture_input = {
     .create = vkcapture_source_create,
     .destroy = vkcapture_source_destroy,
     .update = vkcapture_source_update,
+    .show = vkcapture_source_show,
+    .hide = vkcapture_source_hide,
     .video_tick = vkcapture_source_video_tick,
     .video_render = vkcapture_source_render,
     .get_width = vkcapture_source_get_width,
