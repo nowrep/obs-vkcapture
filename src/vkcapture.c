@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
 #include <inttypes.h>
 #include <sys/un.h>
 #include <sys/socket.h>
