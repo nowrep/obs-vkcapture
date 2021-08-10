@@ -369,7 +369,7 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
             obs_module_text("CaptureWindow"),
             OBS_COMBO_TYPE_LIST,
             OBS_COMBO_FORMAT_STRING);
-    obs_property_list_add_string(p, "", "");
+    obs_property_list_add_string(p, obs_module_text("CaptureAnyWindow"), "");
 
     bool window_found = false;
     pthread_mutex_lock(&server.mutex);
