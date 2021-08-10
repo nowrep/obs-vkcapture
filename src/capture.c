@@ -33,6 +33,21 @@ struct {
     bool capturing;
 } data;
 
+static bool get_wine_exe(char *buf, size_t bufsize)
+{
+    FILE *f = fopen("/proc/self/comm", "r");
+    if (!f) {
+        return false;
+    }
+    size_t n = fread(buf, sizeof(char), bufsize, f);
+    fclose(f);
+    if (n < 1) {
+        return false;
+    }
+    buf[n - 1] = '\0';
+    return true;
+}
+
 static bool get_exe(char *buf, size_t bufsize)
 {
     char exe[PATH_MAX];
@@ -43,6 +58,9 @@ static bool get_exe(char *buf, size_t bufsize)
     exe[n] = '\0';
     strncpy(buf, basename(exe), bufsize);
     buf[bufsize - 1] = '\0';
+    if (!strcmp(buf, "wine-preloader") || !strcmp(buf, "wine64-preloader")) {
+        return get_wine_exe(buf, bufsize);
+    }
     return true;
 }
 
