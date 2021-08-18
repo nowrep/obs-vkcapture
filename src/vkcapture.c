@@ -65,11 +65,13 @@ typedef struct {
     uint32_t root_winid;
 #endif
     bool show_cursor;
+    bool allow_transparency;
     const char *window;
 
     int buf_id;
     int client_id;
     struct capture_texture_data tdata;
+
 } vkcapture_source_t;
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
@@ -114,6 +116,7 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
     vkcapture_source_t *ctx = data;
 
     ctx->show_cursor = obs_data_get_bool(settings, "show_cursor");
+    ctx->allow_transparency = obs_data_get_bool(settings, "allow_transparency");
 
     ctx->window = obs_data_get_string(settings, "window");
     if (!strlen(ctx->window)) {
@@ -324,14 +327,20 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
         return;
     }
 
+    effect = obs_get_base_effect(ctx->allow_transparency ? OBS_EFFECT_DEFAULT : OBS_EFFECT_OPAQUE);
+
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     gs_effect_set_texture(image, ctx->texture);
 
-    gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
+    while (gs_effect_loop(effect, "Draw")) {
+        gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
+    }
 
 #if HAVE_X11_XCB
     if (ctx->show_cursor && ctx->cursor) {
-        xcb_xcursor_render(ctx->cursor);
+        while (gs_effect_loop(effect, "Draw")) {
+            xcb_xcursor_render(ctx->cursor);
+        }
     }
 #endif
 }
@@ -356,6 +365,7 @@ static uint32_t vkcapture_source_get_height(void *data)
 static void vkcapture_source_get_defaults(obs_data_t *defaults)
 {
     obs_data_set_default_bool(defaults, "show_cursor", true);
+    obs_data_set_default_bool(defaults, "allow_transparency", false);
 }
 
 static obs_properties_t *vkcapture_source_get_properties(void *data)
@@ -389,6 +399,9 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
         obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
     }
 #endif
+
+    obs_properties_add_bool(props, "allow_transparency", obs_module_text("AllowTransparency"));
+
     return props;
 }
 
@@ -396,7 +409,7 @@ static struct obs_source_info vkcapture_input = {
     .id = "vkcapture-source",
     .type = OBS_SOURCE_TYPE_INPUT,
     .get_name = vkcapture_source_get_name,
-    .output_flags = OBS_SOURCE_VIDEO,
+    .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW,
     .create = vkcapture_source_create,
     .destroy = vkcapture_source_destroy,
     .update = vkcapture_source_update,
