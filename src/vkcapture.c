@@ -70,7 +70,7 @@ typedef struct {
     int buf_id;
     int client_id;
     struct capture_texture_data tdata;
-    bool draw_opaque;
+    bool allow_transparency;
 
 } vkcapture_source_t;
 
@@ -122,7 +122,7 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
         ctx->window = NULL;
     }
     
-    ctx->draw_opaque = obs_data_get_bool(settings, "draw_opaque");
+    ctx->allow_transparency = obs_data_get_bool(settings, "allow_transparency");
 }
 
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
@@ -328,15 +328,15 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
         return;
     }
 
-    if (ctx->draw_opaque)
-        effect = obs_get_base_effect(OBS_EFFECT_OPAQUE);
-    else
+    if (ctx->allow_transparency)
         effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+    else
+        effect = obs_get_base_effect(OBS_EFFECT_OPAQUE);
 
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     gs_effect_set_texture(image, ctx->texture);
 
-	while (gs_effect_loop(effect, "Draw")) {
+    while (gs_effect_loop(effect, "Draw")) {
         gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
     }
 
@@ -369,7 +369,7 @@ static uint32_t vkcapture_source_get_height(void *data)
 static void vkcapture_source_get_defaults(obs_data_t *defaults)
 {
     obs_data_set_default_bool(defaults, "show_cursor", true);
-    obs_data_set_default_bool(defaults, "draw_opaque", false);
+    obs_data_set_default_bool(defaults, "allow_transparency", false);
 }
 
 static obs_properties_t *vkcapture_source_get_properties(void *data)
@@ -404,7 +404,7 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
     }
 #endif
 
-    obs_properties_add_bool(props, "draw_opaque", obs_module_text("DrawOpacue"));
+    obs_properties_add_bool(props, "allow_transparency", obs_module_text("AllowTransparency"));
     return props;
 }
 
