@@ -32,6 +32,8 @@ else()
     set(LAYER_SUFFIX "_64")
 endif()
 
+set(CMAKE_C_STANDARD 11)
+
 if (BUILD_PLUGIN)
     set(PLUGIN_SOURCES src/vkcapture.c)
     set(PLUGIN_LIBS libobs obs-frontend-api)
@@ -42,7 +44,6 @@ if (BUILD_PLUGIN)
     add_library(linux-vkcapture MODULE ${PLUGIN_SOURCES})
     target_link_libraries(linux-vkcapture ${PLUGIN_LIBS})
     set_target_properties(linux-vkcapture PROPERTIES PREFIX "")
-    set_target_properties(linux-vkcapture PROPERTIES C_STANDARD 11)
     target_include_directories(linux-vkcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
     if (COMMAND install_obs_plugin_with_data)
@@ -58,8 +59,8 @@ endif()
 
 set(LAYER_SOURCES src/vklayer.c src/capture.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
+set_target_properties(VkLayer_obs_vkcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/vklayer.version")
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
-set_target_properties(VkLayer_obs_vkcapture PROPERTIES C_STANDARD 11)
 target_include_directories(VkLayer_obs_vkcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
 set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/glad/glad.c src/capture.c)

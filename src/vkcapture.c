@@ -70,7 +70,6 @@ typedef struct {
     int buf_id;
     int client_id;
     struct capture_texture_data tdata;
-
 } vkcapture_source_t;
 
 static const char *socket_filename = "/tmp/obs-vkcapture.sock";
@@ -393,7 +392,7 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
     return props;
 }
 
-struct obs_source_info vkcapture_input = {
+static struct obs_source_info vkcapture_input = {
     .id = "vkcapture-source",
     .type = OBS_SOURCE_TYPE_INPUT,
     .get_name = vkcapture_source_get_name,

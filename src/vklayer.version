@@ -1,0 +1,5 @@
+{
+    global:
+        OBS_Negotiate;
+    local: *;
+};

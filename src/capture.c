@@ -27,7 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <sys/un.h>
 #include <sys/socket.h>
 
-struct {
+static struct {
     int connfd;
     bool accepted;
     bool capturing;

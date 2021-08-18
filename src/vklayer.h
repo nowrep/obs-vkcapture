@@ -83,7 +83,7 @@ struct vk_device_funcs {
 
 #undef DEF_FUNC
 
-const char *vk_format_to_str(VkFormat format)
+static const char *vk_format_to_str(VkFormat format)
 {
     switch (format) {
     default:
@@ -318,7 +318,7 @@ const char *vk_format_to_str(VkFormat format)
     }
 }
 
-const char *result_to_str(VkResult result)
+static const char *result_to_str(VkResult result)
 {
     switch (result) {
     VAL(VK_SUCCESS);
