@@ -249,6 +249,7 @@ static void gl_free()
 
 static void gl_copy_backbuffer(GLuint dst)
 {
+    glDisable(GL_FRAMEBUFFER_SRGB);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data.fbo);
     glBindTexture(GL_TEXTURE_2D, dst);
@@ -260,10 +261,12 @@ static void gl_copy_backbuffer(GLuint dst)
 
 static void gl_shtex_capture()
 {
+    GLboolean last_srgb;
     GLint last_read_fbo;
     GLint last_draw_fbo;
     GLint last_tex;
 
+    last_srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &last_read_fbo);
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &last_draw_fbo);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
@@ -273,6 +276,11 @@ static void gl_shtex_capture()
     glBindTexture(GL_TEXTURE_2D, last_tex);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, last_draw_fbo);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, last_read_fbo);
+    if (last_srgb) {
+        glEnable(GL_FRAMEBUFFER_SRGB);
+    } else {
+        glDisable(GL_FRAMEBUFFER_SRGB);
+    }
 }
 
 static bool gl_shtex_init()
