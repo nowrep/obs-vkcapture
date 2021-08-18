@@ -249,6 +249,7 @@ static void gl_free()
 
 static void gl_copy_backbuffer(GLuint dst)
 {
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data.fbo);
     glBindTexture(GL_TEXTURE_2D, dst);
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0);
@@ -259,16 +260,19 @@ static void gl_copy_backbuffer(GLuint dst)
 
 static void gl_shtex_capture()
 {
-    GLint last_fbo;
+    GLint last_read_fbo;
+    GLint last_draw_fbo;
     GLint last_tex;
 
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &last_fbo);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &last_read_fbo);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &last_draw_fbo);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
 
     gl_copy_backbuffer(data.texture);
 
     glBindTexture(GL_TEXTURE_2D, last_tex);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, last_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, last_draw_fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, last_read_fbo);
 }
 
 static bool gl_shtex_init()
