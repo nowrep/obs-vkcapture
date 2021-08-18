@@ -334,10 +334,16 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     while (gs_effect_loop(effect, "Draw")) {
         gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
+#if HAVE_X11_XCB
+        if (ctx->allow_transparency && ctx->show_cursor && ctx->cursor) {
+            xcb_xcursor_render(ctx->cursor);
+        }
+#endif
     }
 
 #if HAVE_X11_XCB
-    if (ctx->show_cursor && ctx->cursor) {
+    if (!ctx->allow_transparency && ctx->show_cursor && ctx->cursor) {
+        effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
         while (gs_effect_loop(effect, "Draw")) {
             xcb_xcursor_render(ctx->cursor);
         }
