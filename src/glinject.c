@@ -346,7 +346,7 @@ static bool gl_shtex_init()
             data.buf_strides[i] = x11_f.xcb_dri3_buffers_from_pixmap_strides(reply)[i];
             data.buf_offsets[i] = x11_f.xcb_dri3_buffers_from_pixmap_offsets(reply)[i];
         }
-        data.buf_fourcc = reply->bpp == 24 ? DRM_FORMAT_XRGB8888 : DRM_FORMAT_ARGB8888;
+        data.buf_fourcc = DRM_FORMAT_ARGB8888;
         data.buf_modifier = reply->modifier;
         free(reply);
     } else {

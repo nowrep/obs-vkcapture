@@ -816,7 +816,8 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 
     data->cur_swap = swap;
 
-    capture_init_shtex(swap->image_extent.width, swap->image_extent.height, DRM_FORMAT_XRGB8888,
+    capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
+        vk_format_has_alpha(swap->format) ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_XRGB8888,
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
         swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
 
