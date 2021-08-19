@@ -145,8 +145,7 @@ struct x11_funcs {
     int (*XFreePixmap)(void *display, unsigned long pixmap);
     int (*XFree)(void *data);
 
-    void *(*xcb_connect)(const char *displayname, int *screenp);
-    void (*xcb_disconnect)(void *c);
+    void *(*XGetXCBConnection)(void *display);
     void *(*xcb_dri3_buffers_from_pixmap)(void *c, unsigned long pixmap);
     P_xcb_dri3_buffers_from_pixmap_reply_t *(*xcb_dri3_buffers_from_pixmap_reply)(void *c, void *cookie, void *error);
     int *(*xcb_dri3_buffers_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffers_from_pixmap_reply_t *reply);

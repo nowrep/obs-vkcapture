@@ -51,7 +51,6 @@ struct gl_data {
     int buf_fds[4];
 
     bool glx;
-    void *xcb_con;
     unsigned long xpixmap;
     void *glxpixmap;
 
@@ -132,13 +131,12 @@ static bool gl_init_funcs(bool glx)
         GETXADDR(XFreePixmap);
         GETXADDR(XFree);
 
-        handle = dlopen("libxcb.so.1", RTLD_LAZY);
+        handle = dlopen("libX11-xcb.so.1", RTLD_LAZY);
         if (!handle) {
-            hlog("Failed to open libxcb.so.1");
+            hlog("Failed to open libX11-xcb.so.1");
             return false;
         }
-        GETXADDR(xcb_connect);
-        GETXADDR(xcb_disconnect);
+        GETXADDR(XGetXCBConnection);
 
         handle = dlopen("libxcb-dri3.so.0", RTLD_LAZY);
         if (!handle) {
@@ -235,11 +233,6 @@ static void gl_free()
         data.fbo = 0;
     }
 
-    if (data.xcb_con) {
-        x11_f.xcb_disconnect(data.xcb_con);
-        data.xcb_con = NULL;
-    }
-
     capture_stop();
 
     if (was_capturing) {
@@ -300,7 +293,6 @@ static bool gl_shtex_init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     if (data.glx) {
-        data.xcb_con = x11_f.xcb_connect(NULL, NULL);
         unsigned long root = P_DefaultRootWindow(data.display);
         data.xpixmap = x11_f.XCreatePixmap(data.display, root, data.width, data.height, 24);
 
@@ -334,15 +326,16 @@ static bool gl_shtex_init()
 
         glx_f.BindTexImageEXT(data.display, data.glxpixmap, P_GLX_FRONT_LEFT_EXT, NULL);
 
-        void *cookie = x11_f.xcb_dri3_buffers_from_pixmap(data.xcb_con, data.xpixmap);
-        P_xcb_dri3_buffers_from_pixmap_reply_t *reply = x11_f.xcb_dri3_buffers_from_pixmap_reply(data.xcb_con, cookie, NULL);
+        void *xcb_con = x11_f.XGetXCBConnection(data.display);
+        void *cookie = x11_f.xcb_dri3_buffers_from_pixmap(xcb_con, data.xpixmap);
+        P_xcb_dri3_buffers_from_pixmap_reply_t *reply = x11_f.xcb_dri3_buffers_from_pixmap_reply(xcb_con, cookie, NULL);
         if (!reply) {
             hlog("Failed to get buffer from pixmap");
             return false;
         }
         data.nfd = reply->nfd;
         for (uint8_t i = 0; i < reply->nfd; ++i) {
-            data.buf_fds[i] = x11_f.xcb_dri3_buffers_from_pixmap_reply_fds(data.xcb_con, reply)[i];
+            data.buf_fds[i] = x11_f.xcb_dri3_buffers_from_pixmap_reply_fds(xcb_con, reply)[i];
             data.buf_strides[i] = x11_f.xcb_dri3_buffers_from_pixmap_strides(reply)[i];
             data.buf_offsets[i] = x11_f.xcb_dri3_buffers_from_pixmap_offsets(reply)[i];
         }
