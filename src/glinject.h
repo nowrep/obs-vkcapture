@@ -140,14 +140,18 @@ typedef struct P_xcb_dri3_buffers_from_pixmap_reply_t {
     uint8_t  pad1[6];
 } P_xcb_dri3_buffers_from_pixmap_reply_t;
 
+typedef struct P_xcb_dri3_buffers_from_pixmap_cookie_t {
+    unsigned int sequence;
+} P_xcb_dri3_buffers_from_pixmap_cookie_t;
+
 struct x11_funcs {
     unsigned long (*XCreatePixmap)(void *display, unsigned long drawable, unsigned width, unsigned height, unsigned depth);
     int (*XFreePixmap)(void *display, unsigned long pixmap);
     int (*XFree)(void *data);
 
     void *(*XGetXCBConnection)(void *display);
-    void *(*xcb_dri3_buffers_from_pixmap)(void *c, unsigned long pixmap);
-    P_xcb_dri3_buffers_from_pixmap_reply_t *(*xcb_dri3_buffers_from_pixmap_reply)(void *c, void *cookie, void *error);
+    P_xcb_dri3_buffers_from_pixmap_cookie_t (*xcb_dri3_buffers_from_pixmap)(void *c, unsigned long pixmap);
+    P_xcb_dri3_buffers_from_pixmap_reply_t *(*xcb_dri3_buffers_from_pixmap_reply)(void *c, P_xcb_dri3_buffers_from_pixmap_cookie_t cookie, void *error);
     int *(*xcb_dri3_buffers_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
     uint32_t *(*xcb_dri3_buffers_from_pixmap_strides)(P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
     uint32_t *(*xcb_dri3_buffers_from_pixmap_offsets)(P_xcb_dri3_buffers_from_pixmap_reply_t *reply);

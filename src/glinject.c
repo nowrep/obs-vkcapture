@@ -327,7 +327,7 @@ static bool gl_shtex_init()
         glx_f.BindTexImageEXT(data.display, data.glxpixmap, P_GLX_FRONT_LEFT_EXT, NULL);
 
         void *xcb_con = x11_f.XGetXCBConnection(data.display);
-        void *cookie = x11_f.xcb_dri3_buffers_from_pixmap(xcb_con, data.xpixmap);
+        P_xcb_dri3_buffers_from_pixmap_cookie_t cookie = x11_f.xcb_dri3_buffers_from_pixmap(xcb_con, data.xpixmap);
         P_xcb_dri3_buffers_from_pixmap_reply_t *reply = x11_f.xcb_dri3_buffers_from_pixmap_reply(xcb_con, cookie, NULL);
         if (!reply) {
             hlog("Failed to get buffer from pixmap");
