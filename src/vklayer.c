@@ -28,8 +28,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <inttypes.h>
 #include <vulkan/vk_layer.h>
 
-#define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)
-
 // Based on obs-studio/plugins/win-capture/graphics-hook/vulkan-capture.c
 
 /* ======================================================================== */
