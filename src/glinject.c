@@ -158,13 +158,13 @@ static bool gl_init_funcs(bool glx)
             return false;
         }
         GETEGLADDR(GetProcAddress);
-        GETEGLADDR(DestroyContext);
-        GETEGLADDR(GetCurrentContext);
-        GETEGLADDR(CreateWindowSurface);
-        GETEGLADDR(CreateImage);
-        GETEGLADDR(DestroyImage);
-        GETEGLADDR(QuerySurface);
-        GETEGLADDR(SwapBuffers);
+        GETEGLPROCADDR(DestroyContext);
+        GETEGLPROCADDR(GetCurrentContext);
+        GETEGLPROCADDR(CreateWindowSurface);
+        GETEGLPROCADDR(CreateImage);
+        GETEGLPROCADDR(DestroyImage);
+        GETEGLPROCADDR(QuerySurface);
+        GETEGLPROCADDR(SwapBuffers);
         GETEGLPROCADDR(ExportDMABUFImageQueryMESA);
         GETEGLPROCADDR(ExportDMABUFImageMESA);
         egl_f.valid = true;
