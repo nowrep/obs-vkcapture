@@ -92,7 +92,7 @@ static bool gl_init_funcs(bool glx)
         return glx ? glx_f.valid && x11_f.valid : egl_f.valid;
     }
 
-    hlog("Init %s", PLUGIN_VERSION);
+    hlog("Init %s %s", glx ? "GLX" : "EGL", PLUGIN_VERSION);
 
     gl_seen = true;
     egl_f.valid = false;

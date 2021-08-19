@@ -1809,7 +1809,7 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInt
     }
 
     if (!vulkan_seen) {
-        hlog("Init %s", PLUGIN_VERSION);
+        hlog("Init Vulkan %s", PLUGIN_VERSION);
         init_obj_list(&instances);
         init_obj_list(&devices);
         capture_init();
