@@ -380,7 +380,14 @@ static bool gl_init(void *display, void *surface)
         data.winid = (uintptr_t)surface;
     }
 
-    if (!gl_shtex_init()) {
+    GLint last_tex;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
+
+    const bool init = gl_shtex_init();
+
+    glBindTexture(GL_TEXTURE_2D, last_tex);
+
+    if (!init) {
         hlog("shtex init failed");
         return false;
     }
