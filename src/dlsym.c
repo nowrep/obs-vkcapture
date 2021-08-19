@@ -66,31 +66,39 @@ void *real_dlsym(void *handle, const char *symbol)
     return dl_f.dlsym(handle, symbol);
 }
 
+void *real_dlvsym(void *handle, const char *symbol, const char *version)
+{
+    if (!dl_init_funcs()) {
+        return NULL;
+    }
+    return dl_f.dlvsym(handle, symbol, version);
+}
+
 extern void *obs_vkcapture_glXGetProcAddress(const char *name);
 extern void *obs_vkcapture_eglGetProcAddress(const char *name);
 
-void *dlsym(void *handle, const char *name)
+void *dlsym(void *handle, const char *symbol)
 {
-    void *func = NULL;
-    func = obs_vkcapture_glXGetProcAddress(name);
-    if (!func) {
-        func = obs_vkcapture_eglGetProcAddress(name);
+    void *real_func = real_dlsym(handle, symbol);
+    if (!real_func) {
+        return NULL;
     }
+    void *func = obs_vkcapture_glXGetProcAddress(symbol);
     if (!func) {
-        func = real_dlsym(handle, name);
+        func = obs_vkcapture_eglGetProcAddress(symbol);
     }
-    return func;
+    return func ? func : real_func;
 }
 
-void *dlvsym(void *handle, const char *name, const char *version)
+void *dlvsym(void *handle, const char *symbol, const char *version)
 {
-    void *func = NULL;
-    func = obs_vkcapture_glXGetProcAddress(name);
-    if (!func) {
-        func = obs_vkcapture_eglGetProcAddress(name);
+    void *real_func = real_dlvsym(handle, symbol, version);
+    if (!real_func) {
+        return NULL;
     }
+    void *func = obs_vkcapture_glXGetProcAddress(symbol);
     if (!func) {
-        func = dl_f.dlvsym(handle, name, version);
+        func = obs_vkcapture_eglGetProcAddress(symbol);
     }
-    return func;
+    return func ? func : real_func;
 }

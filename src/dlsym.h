@@ -28,3 +28,4 @@ struct dl_funcs {
 };
 
 void *real_dlsym(void *handle, const char *symbol);
+void *real_dlvsym(void *handle, const char *symbol, const char *version);
