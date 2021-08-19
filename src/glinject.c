@@ -405,7 +405,8 @@ static void gl_capture(void *display, void *surface)
 {
     if (!gl_loaded) {
         gl_loaded = true;
-        if (!gladLoadGL()) {
+        GLADloadproc load = data.glx ? glx_f.GetProcAddress : egl_f.GetProcAddress;
+        if (!gladLoadGLLoader(load)) {
             hlog("Failed to load GL");
         }
     }
