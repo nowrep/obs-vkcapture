@@ -244,26 +244,26 @@ static struct vk_data *alloc_device_data(const VkAllocationCallbacks *ac)
 
 static void init_device_data(struct vk_data *data, VkDevice device)
 {
-    add_obj_data(&devices, (uint64_t)GET_LDT(device), data);
+    add_obj_data(&devices, (uintptr_t)GET_LDT(device), data);
     data->device = device;
 }
 
 static struct vk_data *get_device_data(VkDevice device)
 {
     return (struct vk_data *)get_obj_data(&devices,
-            (uint64_t)GET_LDT(device));
+            (uintptr_t)GET_LDT(device));
 }
 
 static struct vk_data *get_device_data_by_queue(VkQueue queue)
 {
     return (struct vk_data *)get_obj_data(&devices,
-            (uint64_t)GET_LDT(queue));
+            (uintptr_t)GET_LDT(queue));
 }
 
 static struct vk_data *remove_device_data(VkDevice device)
 {
     return (struct vk_data *)remove_obj_data(&devices,
-            (uint64_t)GET_LDT(device));
+            (uintptr_t)GET_LDT(device));
 }
 
 static void free_device_data(struct vk_data *data,
@@ -283,7 +283,7 @@ static struct vk_queue_data *add_queue_data(struct vk_data *data, VkQueue queue,
         vk_alloc(ac, sizeof(struct vk_queue_data),
                 _Alignof(struct vk_queue_data),
                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-    add_obj_data(&data->queues, (uint64_t)queue, queue_data);
+    add_obj_data(&data->queues, (uintptr_t)queue, queue_data);
     queue_data->fam_idx = fam_idx;
     queue_data->supports_transfer = supports_transfer;
     queue_data->frames = NULL;
@@ -295,7 +295,7 @@ static struct vk_queue_data *add_queue_data(struct vk_data *data, VkQueue queue,
 static struct vk_queue_data *get_queue_data(struct vk_data *data, VkQueue queue)
 {
     return (struct vk_queue_data *)get_obj_data(&data->queues,
-            (uint64_t)queue);
+            (uintptr_t)queue);
 }
 
 static VkQueue get_queue_key(const struct vk_queue_data *queue_data)
@@ -503,14 +503,14 @@ static struct vk_inst_data *alloc_inst_data(const VkAllocationCallbacks *ac)
 
 static void init_inst_data(struct vk_inst_data *idata, VkInstance instance)
 {
-    add_obj_data(&instances, (uint64_t)GET_LDT(instance), idata);
+    add_obj_data(&instances, (uintptr_t)GET_LDT(instance), idata);
     idata->instance = instance;
 }
 
 static struct vk_inst_data *get_inst_data(VkInstance instance)
 {
     return (struct vk_inst_data *)get_obj_data(&instances,
-            (uint64_t)GET_LDT(instance));
+            (uintptr_t)GET_LDT(instance));
 }
 
 static struct vk_inst_funcs *get_inst_funcs(VkInstance instance)
@@ -524,7 +524,7 @@ static struct vk_inst_data *
 get_inst_data_by_physical_device(VkPhysicalDevice physicalDevice)
 {
     return (struct vk_inst_data *)get_obj_data(
-            &instances, (uint64_t)GET_LDT(physicalDevice));
+            &instances, (uintptr_t)GET_LDT(physicalDevice));
 }
 
 static struct vk_inst_funcs *
@@ -540,7 +540,7 @@ static void remove_free_inst_data(VkInstance inst,
         const VkAllocationCallbacks *ac)
 {
     struct vk_inst_data *idata = (struct vk_inst_data *)remove_obj_data(
-            &instances, (uint64_t)GET_LDT(inst));
+            &instances, (uintptr_t)GET_LDT(inst));
     vk_free(ac, idata);
 }
 
