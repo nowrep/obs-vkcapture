@@ -168,7 +168,11 @@ static bool gl_init_funcs(bool glx)
         egl_f.valid = true;
     }
 
-    data.valid = true;
+    if (!capture_is_blacklisted()) {
+        data.valid = true;
+    } else {
+        hlog("This process is blacklisted");
+    }
 
     return true;
 }
@@ -455,6 +459,9 @@ static struct {
 
 void *obs_vkcapture_eglGetProcAddress(const char *name)
 {
+    if (capture_is_blacklisted()) {
+        return NULL;
+    }
     for (int i = 0; i < sizeof(egl_hooks_map) / sizeof(egl_hooks_map[0]); ++i) {
         if (strcmp(name, egl_hooks_map[i].name) == 0) {
             return egl_hooks_map[i].func;
@@ -533,6 +540,9 @@ static struct {
 
 void *obs_vkcapture_glXGetProcAddress(const char *name)
 {
+    if (capture_is_blacklisted()) {
+        return NULL;
+    }
     for (int i = 0; i < sizeof(glx_hooks_map) / sizeof(glx_hooks_map[0]); ++i) {
         if (strcmp(name, glx_hooks_map[i].name) == 0) {
             return glx_hooks_map[i].func;

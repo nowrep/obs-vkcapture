@@ -71,3 +71,4 @@ void capture_stop();
 bool capture_should_stop();
 bool capture_should_init();
 bool capture_ready();
+bool capture_is_blacklisted();

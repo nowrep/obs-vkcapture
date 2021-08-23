@@ -206,3 +206,34 @@ bool capture_ready()
 {
     return data.capturing;
 }
+
+bool capture_is_blacklisted()
+{
+    static int blacklisted = -1;
+    if (blacklisted != -1) {
+        return blacklisted == 1;
+    }
+
+    static const char *blacklist[] = {
+        "steamwebhelper",
+        "gldriverquery",
+        "vulkandriverquery",
+        "steam"
+    };
+
+    char exe[128];
+    if (!get_exe(exe, 128)) {
+        blacklisted = 1;
+        return true;
+    }
+
+    for (int i = 0; i < sizeof(blacklist) / sizeof(blacklist[0]); ++i) {
+        if (!strcmp(exe, blacklist[i])) {
+            blacklisted = 1;
+            return true;
+        }
+    }
+
+    blacklisted = 0;
+    return false;
+}
