@@ -60,11 +60,14 @@ struct capture_texture_data {
 #define CAPTURE_TEXTURE_DATA_SIZE 128
 static_assert(sizeof(struct capture_texture_data) == CAPTURE_TEXTURE_DATA_SIZE, "size mismatch");
 
+struct wl_display;
+
 void capture_init();
+void capture_init_wayland(struct wl_display *display);
 void capture_update_socket();
 void capture_init_shtex(
         int width, int height, int format, int strides[4],
-        int offsets[4], uint64_t modifier, uint32_t winid,
+        int offsets[4], uint64_t modifier, uint64_t winid,
         bool flip, int nfd, int fds[4]);
 void capture_stop();
 

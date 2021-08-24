@@ -58,7 +58,7 @@ struct vk_swap_data {
 
     VkExtent2D image_extent;
     VkFormat format;
-    uint32_t winid;
+    uint64_t winid;
     VkImage export_image;
     VkDeviceMemory export_mem;
     VkImage *swap_images;
@@ -92,7 +92,7 @@ struct vk_frame_data {
 struct vk_surf_data {
     struct vk_obj_node node;
 
-    uint32_t winid;
+    uint64_t winid;
 };
 
 struct vk_inst_data {
@@ -460,7 +460,7 @@ static void vk_shtex_free(struct vk_data *data)
 /* ------------------------------------------------------------------------- */
 
 static void add_surf_data(struct vk_inst_data *idata, VkSurfaceKHR surf,
-        uint32_t winid, const VkAllocationCallbacks *ac)
+        uint64_t winid, const VkAllocationCallbacks *ac)
 {
     struct vk_surf_data *surf_data = vk_alloc(
             ac, sizeof(struct vk_surf_data), _Alignof(struct vk_surf_data),
@@ -472,7 +472,7 @@ static void add_surf_data(struct vk_inst_data *idata, VkSurfaceKHR surf,
     }
 }
 
-static uint32_t find_surf_winid(struct vk_inst_data *idata, VkSurfaceKHR surf)
+static uint64_t find_surf_winid(struct vk_inst_data *idata, VkSurfaceKHR surf)
 {
     struct vk_surf_data *surf_data = (struct vk_surf_data *)get_obj_data(
             &idata->surfaces, (uint64_t)surf);
@@ -1253,6 +1253,9 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
 #if HAVE_X11_XLIB
     GETADDR(CreateXlibSurfaceKHR);
 #endif
+#if HAVE_WAYLAND
+    GETADDR(CreateWaylandSurfaceKHR);
+#endif
     GETADDR(DestroySurfaceKHR);
 #undef GETADDR
 
@@ -1692,6 +1695,27 @@ static VkResult VKAPI_CALL OBS_CreateXlibSurfaceKHR(
 }
 #endif
 
+#if HAVE_WAYLAND
+static VkResult VKAPI_CALL OBS_CreateWaylandSurfaceKHR(
+        VkInstance inst, const VkWaylandSurfaceCreateInfoKHR *info,
+        const VkAllocationCallbacks *ac, VkSurfaceKHR *surf)
+{
+#ifndef NDEBUG
+    hlog("CreateWaylandSurfaceKHR");
+#endif
+
+    struct vk_inst_data *idata = get_inst_data(inst);
+    struct vk_inst_funcs *ifuncs = &idata->funcs;
+
+    VkResult res = ifuncs->CreateWaylandSurfaceKHR(inst, info, ac, surf);
+    if ((res == VK_SUCCESS) && idata->valid) {
+        capture_init_wayland(info->display);
+        add_surf_data(idata, *surf, (uintptr_t)info->surface, ac);
+    }
+    return res;
+}
+#endif
+
 static void VKAPI_CALL OBS_DestroySurfaceKHR(VkInstance inst, VkSurfaceKHR surf,
         const VkAllocationCallbacks *ac)
 {
@@ -1751,6 +1775,9 @@ static PFN_vkVoidFunction VKAPI_CALL OBS_GetInstanceProcAddr(VkInstance instance
 #if HAVE_X11_XLIB
     GETPROCADDR(CreateXlibSurfaceKHR);
 #endif
+#if HAVE_WAYLAND
+    GETPROCADDR(CreateWaylandSurfaceKHR);
+#endif
     GETPROCADDR(DestroySurfaceKHR);
 
     /* device chain functions we intercept */
@@ -1775,6 +1802,9 @@ static PFN_vkVoidFunction VKAPI_CALL OBS_GetInstanceProcAddr(VkInstance instance
 #endif
 #if HAVE_X11_XLIB
     GETPROCADDR_IF_SUPPORTED(CreateXlibSurfaceKHR);
+#endif
+#if HAVE_WAYLAND
+    GETPROCADDR_IF_SUPPORTED(CreateWaylandSurfaceKHR);
 #endif
     GETPROCADDR_IF_SUPPORTED(DestroySurfaceKHR);
 

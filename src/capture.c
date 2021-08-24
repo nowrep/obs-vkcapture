@@ -18,6 +18,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "capture.h"
 #include "utils.h"
+#include "plugin-macros.h"
+
+#if HAVE_WAYLAND
+#include "capture_wayland.h"
+#endif
 
 #include <errno.h>
 #include <unistd.h>
@@ -113,6 +118,10 @@ void capture_init()
 
 void capture_update_socket()
 {
+#if HAVE_WAYLAND
+    capture_update_wayland();
+#endif
+
     static int64_t last_check = 0;
     const int64_t now = os_time_get_nano();
     if (now - last_check < 1000000000) {
@@ -146,7 +155,7 @@ void capture_update_socket()
 
 void capture_init_shtex(
         int width, int height, int format, int strides[4],
-        int offsets[4], uint64_t modifier, uint32_t winid,
+        int offsets[4], uint64_t modifier, uint64_t winid,
         bool flip, int nfd, int fds[4])
 {
     struct capture_texture_data td;
@@ -185,6 +194,10 @@ void capture_init_shtex(
     }
 
     data.capturing = true;
+
+#if HAVE_WAYLAND
+    capture_set_wlsurface((struct wl_surface*)winid);
+#endif
 }
 
 void capture_stop()

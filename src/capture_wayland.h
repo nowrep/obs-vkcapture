@@ -1,5 +1,5 @@
 /*
-obs-vkcapture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -16,16 +16,15 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#ifndef PLUGINNAME_H
-#define PLUGINNAME_H
+#pragma once
 
-#cmakedefine01 HAVE_X11_XCB
-#cmakedefine01 HAVE_X11_XLIB
-#cmakedefine01 HAVE_WAYLAND
+#include "plugin-macros.h"
 
-#define PLUGIN_NAME "linux-vkcapture"
-#define PLUGIN_VERSION "@CMAKE_PROJECT_VERSION@"
+#if HAVE_WAYLAND
 
-#define blog(level, msg, ...) blog(level, "[" PLUGIN_NAME "] " msg, ##__VA_ARGS__)
+#include <wayland-client.h>
 
-#endif // PLUGINNAME_H
+void capture_update_wayland();
+void capture_set_wlsurface(struct wl_surface *surface);
+
+#endif
