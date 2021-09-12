@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#define _GNU_SOURCE
+
 #include "glinject.h"
 #include "capture.h"
 #include "utils.h"
@@ -59,7 +61,12 @@ struct gl_data {
 static struct gl_data data;
 
 #define GETADDR(s, p, func) \
-    p.func = (typeof(p.func))real_dlsym(handle, #s #func); \
+    if (use_rtld_next) { \
+        p.func = (typeof(p.func))real_dlsym(RTLD_NEXT, #s #func); \
+    } \
+    if (!p.func) { \
+        p.func = (typeof(p.func))real_dlsym(handle, #s #func); \
+    } \
     if (!p.func) { \
         hlog("Failed to resolve " #s #func); \
         return false; \
@@ -102,6 +109,11 @@ static bool gl_init_funcs(bool glx)
     memset(&data, 0, sizeof(struct gl_data));
     memset(data.buf_fds, -1, sizeof(data.buf_fds));
     data.glx = glx;
+
+    const bool use_rtld_next = real_dlsym(RTLD_NEXT, "mangohud_find_glx_ptr");
+    if (use_rtld_next) {
+        hlog("MangoHud detected");
+    }
 
     if (glx) {
         void *handle = dlopen("libGL.so.1", RTLD_LAZY);
