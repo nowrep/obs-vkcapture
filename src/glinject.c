@@ -61,11 +61,8 @@ struct gl_data {
 static struct gl_data data;
 
 #define GETADDR(s, p, func) \
-    if (use_rtld_next) { \
-        p.func = (typeof(p.func))real_dlsym(RTLD_NEXT, #s #func); \
-    } \
     if (!p.func) { \
-        p.func = (typeof(p.func))real_dlsym(handle, #s #func); \
+        p.func = (typeof(p.func))real_dlsym(RTLD_NEXT, #s #func); \
     } \
     if (!p.func) { \
         hlog("Failed to resolve " #s #func); \
@@ -110,17 +107,7 @@ static bool gl_init_funcs(bool glx)
     memset(data.buf_fds, -1, sizeof(data.buf_fds));
     data.glx = glx;
 
-    const bool use_rtld_next = real_dlsym(RTLD_NEXT, "mangohud_find_glx_ptr");
-    if (use_rtld_next) {
-        hlog("MangoHud detected");
-    }
-
     if (glx) {
-        void *handle = dlopen("libGL.so.1", RTLD_LAZY);
-        if (!handle) {
-            hlog("Failed to open libGL.so.1");
-            return false;
-        }
         GETGLXADDR(GetProcAddress);
         GETGLXADDR(GetProcAddressARB);
         GETGLXPROCADDR(DestroyContext);
@@ -134,7 +121,7 @@ static bool gl_init_funcs(bool glx)
         GETGLXPROCADDR(ChooseVisual);
         glx_f.valid = true;
 
-        handle = dlopen("libX11.so.6", RTLD_LAZY);
+        void *handle = dlopen("libX11.so.6", RTLD_LAZY);
         if (!handle) {
             hlog("Failed to open libX11.so.6");
             return false;
@@ -162,11 +149,6 @@ static bool gl_init_funcs(bool glx)
         GETXADDR(xcb_dri3_buffers_from_pixmap_offsets);
         x11_f.valid = true;
     } else {
-        void *handle = dlopen("libEGL.so.1", RTLD_LAZY);
-        if (!handle) {
-            hlog("Failed to open libEGL.so.1");
-            return false;
-        }
         GETEGLADDR(GetProcAddress);
         GETEGLPROCADDR(DestroyContext);
         GETEGLPROCADDR(GetCurrentContext);
