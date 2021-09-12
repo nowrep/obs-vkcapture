@@ -17,21 +17,21 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #define _GNU_SOURCE
+#define GL_GLEXT_PROTOTYPES
 
 #include "glinject.h"
 #include "capture.h"
 #include "utils.h"
 #include "dlsym.h"
-#include "glad/glad.h"
 #include "plugin-macros.h"
 
 #include <dlfcn.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <GL/gl.h>
 
 static bool gl_seen = false;
-static bool gl_loaded = false;
 static struct egl_funcs egl_f;
 static struct glx_funcs glx_f;
 static struct x11_funcs x11_f;
@@ -188,10 +188,6 @@ static void querySurface(int *width, int *height)
 
 static void gl_free()
 {
-    if (!gl_loaded) {
-        return;
-    }
-
     const bool was_capturing = data.nfd;
 
     if (data.nfd) {
@@ -390,17 +386,6 @@ static bool gl_init(void *display, void *surface)
 
 static void gl_capture(void *display, void *surface)
 {
-    if (!gl_loaded) {
-        gl_loaded = true;
-        GLADloadproc load = data.glx ? glx_f.GetProcAddress : egl_f.GetProcAddress;
-        if (!gladLoadGLLoader(load)) {
-            hlog("Failed to load GL");
-        }
-    }
-    if (glGetError == NULL) {
-        return;
-    }
-
     capture_update_socket();
 
     if (capture_should_stop()) {

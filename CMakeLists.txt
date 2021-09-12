@@ -77,7 +77,7 @@ if (HAVE_X11_XCB)
     )
 endif()
 
-set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/glad/glad.c src/capture.c)
+set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/capture.c)
 add_library(obs_glcapture MODULE ${GL_SOURCES})
 set_target_properties(obs_glcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/glinject.version")
 target_link_libraries(obs_glcapture ${CMAKE_DL_LIBS} OpenGL::GL)
