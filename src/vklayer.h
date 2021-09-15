@@ -31,6 +31,56 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <vulkan/vulkan_xlib.h>
 #endif
 
+#ifndef VK_EXT_image_drm_format_modifier
+#define VK_EXT_image_drm_format_modifier 1
+#define VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_SPEC_VERSION 1
+#define VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME "VK_EXT_image_drm_format_modifier"
+
+#define VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT -1000158000
+#define VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT 1000158000
+#define VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT 1000158003
+#define VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT 1000158005
+#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT 1000158002
+#define VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT 1000158000
+
+typedef struct VkDrmFormatModifierPropertiesEXT {
+    uint64_t                drmFormatModifier;
+    uint32_t                drmFormatModifierPlaneCount;
+    VkFormatFeatureFlags    drmFormatModifierTilingFeatures;
+} VkDrmFormatModifierPropertiesEXT;
+
+typedef struct VkDrmFormatModifierPropertiesListEXT {
+    VkStructureType                      sType;
+    void*                                pNext;
+    uint32_t                             drmFormatModifierCount;
+    VkDrmFormatModifierPropertiesEXT*    pDrmFormatModifierProperties;
+} VkDrmFormatModifierPropertiesListEXT;
+
+typedef struct VkPhysicalDeviceImageDrmFormatModifierInfoEXT {
+    VkStructureType    sType;
+    const void*        pNext;
+    uint64_t           drmFormatModifier;
+    VkSharingMode      sharingMode;
+    uint32_t           queueFamilyIndexCount;
+    const uint32_t*    pQueueFamilyIndices;
+} VkPhysicalDeviceImageDrmFormatModifierInfoEXT;
+
+typedef struct VkImageDrmFormatModifierListCreateInfoEXT {
+    VkStructureType    sType;
+    const void*        pNext;
+    uint32_t           drmFormatModifierCount;
+    const uint64_t*    pDrmFormatModifiers;
+} VkImageDrmFormatModifierListCreateInfoEXT;
+
+typedef struct VkImageDrmFormatModifierPropertiesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    uint64_t           drmFormatModifier;
+} VkImageDrmFormatModifierPropertiesEXT;
+
+typedef VkResult (VKAPI_PTR *PFN_vkGetImageDrmFormatModifierPropertiesEXT)(VkDevice device, VkImage image, VkImageDrmFormatModifierPropertiesEXT* pProperties);
+#endif
+
 #define DEF_FUNC(x) PFN_vk##x x
 
 struct vk_inst_funcs {
