@@ -64,7 +64,7 @@ endif()
 
 set(LAYER_SOURCES src/vklayer.c src/capture.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
-set_target_properties(VkLayer_obs_vkcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/vklayer.version")
+set_target_properties(VkLayer_obs_vkcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=\"${CMAKE_CURRENT_SOURCE_DIR}/src/vklayer.version\"")
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
 target_include_directories(VkLayer_obs_vkcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 if (HAVE_X11_XLIB)
@@ -79,7 +79,7 @@ endif()
 
 set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/capture.c)
 add_library(obs_glcapture MODULE ${GL_SOURCES})
-set_target_properties(obs_glcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/glinject.version")
+set_target_properties(obs_glcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=\"${CMAKE_CURRENT_SOURCE_DIR}/src/glinject.version\"")
 target_link_libraries(obs_glcapture ${CMAKE_DL_LIBS} OpenGL::GL)
 target_include_directories(obs_glcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
