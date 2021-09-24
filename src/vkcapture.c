@@ -29,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <inttypes.h>
 #include <sys/un.h>
 #include <sys/socket.h>
+#include <sys/eventfd.h>
 
 #include "utils.h"
 #include "capture.h"
@@ -49,7 +50,7 @@ typedef struct {
 } vkcapture_client_t;
 
 static struct {
-    bool quit;
+    int quitfd;
     pthread_t thread;
     pthread_mutex_t mutex;
     DARRAY(struct pollfd) fds;
@@ -507,11 +508,16 @@ static void *server_thread_run(void *data)
     }
 
     server_add_fd(sockfd, POLLIN);
+    server_add_fd(server.quitfd, POLLIN);
 
-    while (!server.quit) {
-        int ret = poll(server.fds.array, server.fds.num, 1000);
+    while (true) {
+        int ret = poll(server.fds.array, server.fds.num, -1);
         if (ret <= 0) {
             continue;
+        }
+
+        if (server_has_event_on_fd(server.quitfd)) {
+            break;
         }
 
         if (server_has_event_on_fd(sockfd)) {
@@ -636,8 +642,15 @@ bool obs_module_load(void)
         return false;
     }
 
+    server.quitfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (server.quitfd < 0) {
+        blog(LOG_ERROR, "Failed to create eventfd: %s", strerror(errno));
+        return false;
+    }
+
     pthread_mutex_init(&server.mutex, NULL);
     if (pthread_create(&server.thread, NULL, server_thread_run, NULL) != 0) {
+        blog(LOG_ERROR, "Failed to create thread");
         return false;
     }
 
@@ -649,7 +662,9 @@ bool obs_module_load(void)
 
 void obs_module_unload()
 {
-    server.quit = true;
+    uint64_t q = 1;
+    write(server.quitfd, &q, sizeof(q));
+
     pthread_join(server.thread, NULL);
 
     blog(LOG_INFO, "plugin unloaded");
