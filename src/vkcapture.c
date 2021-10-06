@@ -75,8 +75,6 @@ typedef struct {
 
 } vkcapture_source_t;
 
-static const char *socket_filename = "/tmp/obs-vkcapture.sock";
-
 static void destroy_texture(vkcapture_source_t *ctx)
 {
     if (!ctx->texture) {
@@ -482,20 +480,21 @@ static void server_cleanup_client(vkcapture_client_t *client)
 
 static void *server_thread_run(void *data)
 {
+    const char sockname[] = "/com/obsproject/vkcapture";
+
     int bufid = 0;
     int clientid = 0;
 
     da_init(server.fds);
     da_init(server.clients);
 
-    unlink(socket_filename);
+    struct sockaddr_un addr;
+    addr.sun_family = PF_LOCAL;
+    addr.sun_path[0] = '\0'; // Abstract socket
+    memcpy(&addr.sun_path[1], sockname, sizeof(sockname) - 1);
 
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, socket_filename);
-    int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-
-    int ret = bind(sockfd, (const struct sockaddr *)&addr, sizeof(addr));
+    int sockfd = socket(PF_LOCAL, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    int ret = bind(sockfd, (const struct sockaddr *)&addr, sizeof(addr.sun_family) + sizeof(sockname));
     if (ret < 0) {
         blog(LOG_ERROR, "Cannot bind unix socket to %s: %d", addr.sun_path, errno);
         return NULL;
@@ -628,7 +627,7 @@ static void *server_thread_run(void *data)
     }
 
     close(sockfd);
-    unlink(socket_filename);
+
     da_free(server.clients);
     da_free(server.fds);
 

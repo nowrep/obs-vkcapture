@@ -19,9 +19,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "capture.h"
 #include "utils.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include <errno.h>
 #include <unistd.h>
-#include <stdio.h>
 #include <limits.h>
 #include <libgen.h>
 #include <sys/un.h>
@@ -66,17 +68,15 @@ static bool get_exe(char *buf, size_t bufsize)
 
 static bool capture_try_connect()
 {
-    const char *sockname = "/tmp/obs-vkcapture.sock";
-
-    if (access(sockname, R_OK) != 0) {
-        return false;
-    }
+    const char sockname[] = "/com/obsproject/vkcapture";
 
     struct sockaddr_un addr;
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, sockname);
-    int sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-    int ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
+    addr.sun_family = PF_LOCAL;
+    addr.sun_path[0] = '\0'; // Abstract socket
+    memcpy(&addr.sun_path[1], sockname, sizeof(sockname) - 1);
+
+    int sock = socket(PF_LOCAL, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    int ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr.sun_family) + sizeof(sockname));
     if (ret == -1) {
         close(sock);
         return false;
