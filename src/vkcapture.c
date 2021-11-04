@@ -111,7 +111,7 @@ static bool cursor_enabled(vkcapture_source_t *ctx)
     return false;
 }
 
-static void cursor_tick(vkcapture_source_t *ctx)
+static void cursor_update(vkcapture_source_t *ctx)
 {
 #if HAVE_X11_XCB
     if (ctx->xcursor) {
@@ -136,9 +136,7 @@ static void cursor_tick(vkcapture_source_t *ctx)
                 free(tr_r);
             }
         }
-        obs_enter_graphics();
         xcb_xcursor_update(ctx->xcursor, cur_r);
-        obs_leave_graphics();
         free(cur_r);
     }
 #endif
@@ -295,10 +293,6 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         return;
     }
 
-    if (ctx->texture && ctx->show_cursor) {
-        cursor_tick(ctx);
-    }
-
     pthread_mutex_lock(&server.mutex);
 
     if (ctx->client_id) {
@@ -357,6 +351,10 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     if (!ctx->texture) {
         return;
+    }
+
+    if (ctx->show_cursor) {
+        cursor_update(ctx);
     }
 
     effect = obs_get_base_effect(ctx->allow_transparency ? OBS_EFFECT_DEFAULT : OBS_EFFECT_OPAQUE);
