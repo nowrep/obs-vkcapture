@@ -37,6 +37,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #if HAVE_X11_XCB
 #include "xcursor-xcb.h"
+static xcb_connection_t *xcb = NULL;
 #endif
 
 typedef struct {
@@ -61,7 +62,6 @@ typedef struct {
     obs_source_t *source;
     gs_texture_t *texture;
 #if HAVE_X11_XCB
-    xcb_connection_t *xcb;
     xcb_xcursor_t *xcursor;
     uint32_t root_winid;
 #endif
@@ -79,11 +79,14 @@ static void cursor_create(vkcapture_source_t *ctx)
 {
 #if HAVE_X11_XCB
     if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
-        ctx->xcb = xcb_connect(NULL, NULL);
-        if (!ctx->xcb || xcb_connection_has_error(ctx->xcb)) {
-            blog(LOG_ERROR, "Unable to open X display !");
-        } else {
-            ctx->xcursor = xcb_xcursor_init(ctx->xcb);
+        if (!xcb) {
+            xcb = xcb_connect(NULL, NULL);
+            if (!xcb || xcb_connection_has_error(xcb)) {
+                blog(LOG_ERROR, "Unable to open X display!");
+            }
+        }
+        if (xcb) {
+            ctx->xcursor = xcb_xcursor_init(xcb);
         }
     }
 #endif
@@ -96,9 +99,6 @@ static void cursor_destroy(vkcapture_source_t *ctx)
         obs_enter_graphics();
         xcb_xcursor_destroy(ctx->xcursor);
         obs_leave_graphics();
-    }
-    if (ctx->xcb) {
-        xcb_disconnect(ctx->xcb);
     }
 #endif
 }
@@ -116,8 +116,8 @@ static void cursor_tick(vkcapture_source_t *ctx)
 #if HAVE_X11_XCB
     if (ctx->xcursor) {
         if (!ctx->root_winid && ctx->tdata.winid) {
-            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->tdata.winid);
-            xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
+            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(xcb, ctx->tdata.winid);
+            xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(xcb, tre_c, NULL);
             if (tre_r) {
                 ctx->root_winid = tre_r->root;
                 free(tre_r);
@@ -125,12 +125,12 @@ static void cursor_tick(vkcapture_source_t *ctx)
         }
         xcb_translate_coordinates_cookie_t tr_c;
         if (ctx->root_winid && ctx->tdata.winid) {
-            tr_c = xcb_translate_coordinates_unchecked(ctx->xcb, ctx->tdata.winid, ctx->root_winid, 0, 0);
+            tr_c = xcb_translate_coordinates_unchecked(xcb, ctx->tdata.winid, ctx->root_winid, 0, 0);
         }
-        xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(ctx->xcb);
-        xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
+        xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(xcb);
+        xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(xcb, cur_c, NULL);
         if (ctx->root_winid && ctx->tdata.winid) {
-            xcb_translate_coordinates_reply_t *tr_r = xcb_translate_coordinates_reply(ctx->xcb, tr_c, NULL);
+            xcb_translate_coordinates_reply_t *tr_r = xcb_translate_coordinates_reply(xcb, tr_c, NULL);
             if (tr_r) {
                 xcb_xcursor_offset(ctx->xcursor, tr_r->dst_x, tr_r->dst_y);
                 free(tr_r);
