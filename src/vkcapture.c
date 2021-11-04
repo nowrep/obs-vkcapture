@@ -40,6 +40,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 static xcb_connection_t *xcb = NULL;
 #endif
 
+#if HAVE_WAYLAND
+#include "wlcursor.h"
+static struct wl_display *wl_display = NULL;
+static wl_cursor_t *wlcursor = NULL;
+#endif
+
 typedef struct {
     int id;
     int sockfd;
@@ -92,6 +98,19 @@ static void cursor_create(vkcapture_source_t *ctx)
         }
     }
 #endif
+#if HAVE_WAYLAND
+    if (obs_get_nix_platform() == OBS_NIX_PLATFORM_WAYLAND) {
+        if (!wl_display) {
+            wl_display = wl_display_connect(NULL);
+            if (!wl_display) {
+                blog(LOG_ERROR, "Unable to open Wayland display!");
+            }
+        }
+        if (wl_display && !wlcursor) {
+            wlcursor = wl_cursor_init(wl_display);
+        }
+    }
+#endif
 }
 
 static void cursor_destroy(vkcapture_source_t *ctx)
@@ -109,12 +128,32 @@ static void cursor_destroy(vkcapture_source_t *ctx)
         }
     }
 #endif
+#if HAVE_WAYLAND
+    if (!source_instances) {
+        blog(LOG_INFO, "destroy");
+        if (wlcursor) {
+            wl_cursor_destroy(wlcursor);
+            wlcursor = NULL;
+        }
+        if (wl_display) {
+            wl_display_disconnect(wl_display);
+            wl_display = NULL;
+        }
+    }
+#endif
 }
 
 static bool cursor_enabled(vkcapture_source_t *ctx)
 {
 #if HAVE_X11_XCB
-    return ctx->xcursor;
+    if (ctx->xcursor) {
+        return true;
+    }
+#endif
+#if HAVE_WAYLAND
+    if (wlcursor) {
+        return true;
+    }
 #endif
     return false;
 }
@@ -148,6 +187,17 @@ static void cursor_update(vkcapture_source_t *ctx)
         free(cur_r);
     }
 #endif
+#if HAVE_WAYLAND
+    if (wlcursor) {
+        struct pollfd fd;
+        fd.fd = wl_display_get_fd(wl_display);
+        fd.events = POLLIN;
+        if (poll(&fd, 1, 0) > 0) {
+            wl_display_dispatch(wl_display);
+        }
+        wl_display_flush(wl_display);
+    }
+#endif
 }
 
 static void cursor_render(vkcapture_source_t *ctx)
@@ -155,6 +205,11 @@ static void cursor_render(vkcapture_source_t *ctx)
 #if HAVE_X11_XCB
     if (ctx->xcursor) {
         xcb_xcursor_render(ctx->xcursor);
+    }
+#endif
+#if HAVE_WAYLAND
+    if (wlcursor) {
+        wl_cursor_render(wlcursor);
     }
 #endif
 }

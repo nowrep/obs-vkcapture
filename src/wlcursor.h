@@ -1,5 +1,5 @@
 /*
-obs-vkcapture
+OBS Linux Vulkan/OpenGL game capture
 Copyright (C) 2021 David Rosca <nowrep@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -16,16 +16,19 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#ifndef PLUGINNAME_H
-#define PLUGINNAME_H
+#pragma once
 
-#cmakedefine01 HAVE_X11_XCB
-#cmakedefine01 HAVE_X11_XLIB
-#cmakedefine01 HAVE_WAYLAND
+#include <obs.h>
+#include <wayland-client.h>
 
-#define PLUGIN_NAME "linux-vkcapture"
-#define PLUGIN_VERSION "@CMAKE_PROJECT_VERSION@"
+#include "screencopy_unstable_v1.h"
 
-#define blog(level, msg, ...) blog(level, "[" PLUGIN_NAME "] " msg, ##__VA_ARGS__)
+typedef struct {
+    struct wl_shm *shm;
+    struct zext_screencopy_manager_v1 *screencopy;
+    DARRAY(struct output_data*) outputs;
+} wl_cursor_t;
 
-#endif // PLUGINNAME_H
+wl_cursor_t *wl_cursor_init(struct wl_display *display);
+void wl_cursor_destroy(wl_cursor_t *data);
+void wl_cursor_render(wl_cursor_t *data);
