@@ -343,7 +343,8 @@ void wl_cursor_render(wl_cursor_t *data)
     gs_enable_color(true, true, true, false);
 
     gs_matrix_push();
-    gs_matrix_translate3f(output_data->pos_x, output_data->pos_y, 0.0f);
+    gs_matrix_translate3f(output_data->pos_x - output_data->hotspot_x,
+            output_data->pos_y - output_data->hotspot_y, 0.0f);
     gs_draw_sprite(output_data->tex, 0, 0, 0);
     gs_matrix_pop();
 
