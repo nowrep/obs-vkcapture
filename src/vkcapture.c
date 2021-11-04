@@ -58,6 +58,8 @@ static struct {
     DARRAY(vkcapture_client_t) clients;
 } server;
 
+static int source_instances = 0;
+
 typedef struct {
     obs_source_t *source;
     gs_texture_t *texture;
@@ -99,6 +101,12 @@ static void cursor_destroy(vkcapture_source_t *ctx)
         obs_enter_graphics();
         xcb_xcursor_destroy(ctx->xcursor);
         obs_leave_graphics();
+    }
+    if (!source_instances) {
+        if (xcb) {
+            xcb_disconnect(xcb);
+            xcb = NULL;
+        }
     }
 #endif
 }
@@ -168,6 +176,8 @@ static void destroy_texture(vkcapture_source_t *ctx)
 
 static void vkcapture_source_destroy(void *data)
 {
+    --source_instances;
+
     vkcapture_source_t *ctx = data;
 
     destroy_texture(ctx);
@@ -191,6 +201,8 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
 
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 {
+    ++source_instances;
+
     vkcapture_source_t *ctx = bzalloc(sizeof(vkcapture_source_t));
     ctx->source = source;
 
