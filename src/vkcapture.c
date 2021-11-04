@@ -62,7 +62,7 @@ typedef struct {
     gs_texture_t *texture;
 #if HAVE_X11_XCB
     xcb_connection_t *xcb;
-    xcb_xcursor_t *cursor;
+    xcb_xcursor_t *xcursor;
     uint32_t root_winid;
 #endif
     bool show_cursor;
@@ -74,6 +74,84 @@ typedef struct {
     struct capture_texture_data tdata;
 
 } vkcapture_source_t;
+
+static void cursor_create(vkcapture_source_t *ctx)
+{
+#if HAVE_X11_XCB
+    if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
+        ctx->xcb = xcb_connect(NULL, NULL);
+        if (!ctx->xcb || xcb_connection_has_error(ctx->xcb)) {
+            blog(LOG_ERROR, "Unable to open X display !");
+        } else {
+            ctx->xcursor = xcb_xcursor_init(ctx->xcb);
+        }
+    }
+#endif
+}
+
+static void cursor_destroy(vkcapture_source_t *ctx)
+{
+#if HAVE_X11_XCB
+    if (ctx->xcursor) {
+        obs_enter_graphics();
+        xcb_xcursor_destroy(ctx->xcursor);
+        obs_leave_graphics();
+    }
+    if (ctx->xcb) {
+        xcb_disconnect(ctx->xcb);
+    }
+#endif
+}
+
+static bool cursor_enabled(vkcapture_source_t *ctx)
+{
+#if HAVE_X11_XCB
+    return ctx->xcursor;
+#endif
+    return false;
+}
+
+static void cursor_tick(vkcapture_source_t *ctx)
+{
+#if HAVE_X11_XCB
+    if (ctx->xcursor) {
+        if (!ctx->root_winid && ctx->tdata.winid) {
+            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->tdata.winid);
+            xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
+            if (tre_r) {
+                ctx->root_winid = tre_r->root;
+                free(tre_r);
+            }
+        }
+        xcb_translate_coordinates_cookie_t tr_c;
+        if (ctx->root_winid && ctx->tdata.winid) {
+            tr_c = xcb_translate_coordinates_unchecked(ctx->xcb, ctx->tdata.winid, ctx->root_winid, 0, 0);
+        }
+        xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(ctx->xcb);
+        xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
+        if (ctx->root_winid && ctx->tdata.winid) {
+            xcb_translate_coordinates_reply_t *tr_r = xcb_translate_coordinates_reply(ctx->xcb, tr_c, NULL);
+            if (tr_r) {
+                xcb_xcursor_offset(ctx->xcursor, tr_r->dst_x, tr_r->dst_y);
+                free(tr_r);
+            }
+        }
+        obs_enter_graphics();
+        xcb_xcursor_update(ctx->xcursor, cur_r);
+        obs_leave_graphics();
+        free(cur_r);
+    }
+#endif
+}
+
+static void cursor_render(vkcapture_source_t *ctx)
+{
+#if HAVE_X11_XCB
+    if (ctx->xcursor) {
+        xcb_xcursor_render(ctx->xcursor);
+    }
+#endif
+}
 
 static void destroy_texture(vkcapture_source_t *ctx)
 {
@@ -95,17 +173,7 @@ static void vkcapture_source_destroy(void *data)
     vkcapture_source_t *ctx = data;
 
     destroy_texture(ctx);
-
-#if HAVE_X11_XCB
-    if (ctx->cursor) {
-        obs_enter_graphics();
-        xcb_xcursor_destroy(ctx->cursor);
-        obs_leave_graphics();
-    }
-    if (ctx->xcb) {
-        xcb_disconnect(ctx->xcb);
-    }
-#endif
+    cursor_destroy(ctx);
 
     bfree(ctx);
 }
@@ -130,16 +198,7 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 
     vkcapture_source_update(ctx, settings);
 
-#if HAVE_X11_XCB
-    if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
-        ctx->xcb = xcb_connect(NULL, NULL);
-        if (!ctx->xcb || xcb_connection_has_error(ctx->xcb)) {
-            blog(LOG_ERROR, "Unable to open X display !");
-        } else {
-            ctx->cursor = xcb_xcursor_init(ctx->xcb);
-        }
-    }
-#endif
+    cursor_create(ctx);
 
     UNUSED_PARAMETER(settings);
     return ctx;
@@ -236,35 +295,9 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         return;
     }
 
-#if HAVE_X11_XCB
-    if (ctx->texture && ctx->show_cursor && ctx->cursor) {
-        if (!ctx->root_winid && ctx->tdata.winid) {
-            xcb_query_tree_cookie_t tre_c = xcb_query_tree_unchecked(ctx->xcb, ctx->tdata.winid);
-            xcb_query_tree_reply_t *tre_r = xcb_query_tree_reply(ctx->xcb, tre_c, NULL);
-            if (tre_r) {
-                ctx->root_winid = tre_r->root;
-                free(tre_r);
-            }
-        }
-        xcb_translate_coordinates_cookie_t tr_c;
-        if (ctx->root_winid && ctx->tdata.winid) {
-            tr_c = xcb_translate_coordinates_unchecked(ctx->xcb, ctx->tdata.winid, ctx->root_winid, 0, 0);
-        }
-        xcb_xfixes_get_cursor_image_cookie_t cur_c = xcb_xfixes_get_cursor_image_unchecked(ctx->xcb);
-        xcb_xfixes_get_cursor_image_reply_t *cur_r = xcb_xfixes_get_cursor_image_reply(ctx->xcb, cur_c, NULL);
-        if (ctx->root_winid && ctx->tdata.winid) {
-            xcb_translate_coordinates_reply_t *tr_r = xcb_translate_coordinates_reply(ctx->xcb, tr_c, NULL);
-            if (tr_r) {
-                xcb_xcursor_offset(ctx->cursor, tr_r->dst_x, tr_r->dst_y);
-                free(tr_r);
-            }
-        }
-        obs_enter_graphics();
-        xcb_xcursor_update(ctx->cursor, cur_r);
-        obs_leave_graphics();
-        free(cur_r);
+    if (ctx->texture && ctx->show_cursor) {
+        cursor_tick(ctx);
     }
-#endif
 
     pthread_mutex_lock(&server.mutex);
 
@@ -320,7 +353,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
 
 static void vkcapture_source_render(void *data, gs_effect_t *effect)
 {
-    const vkcapture_source_t *ctx = data;
+    vkcapture_source_t *ctx = data;
 
     if (!ctx->texture) {
         return;
@@ -333,21 +366,17 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     while (gs_effect_loop(effect, "Draw")) {
         gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
-#if HAVE_X11_XCB
-        if (ctx->allow_transparency && ctx->show_cursor && ctx->cursor) {
-            xcb_xcursor_render(ctx->cursor);
+        if (ctx->allow_transparency && ctx->show_cursor) {
+            cursor_render(ctx);
         }
-#endif
     }
 
-#if HAVE_X11_XCB
-    if (!ctx->allow_transparency && ctx->show_cursor && ctx->cursor) {
+    if (!ctx->allow_transparency && ctx->show_cursor) {
         effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
         while (gs_effect_loop(effect, "Draw")) {
-            xcb_xcursor_render(ctx->cursor);
+            cursor_render(ctx);
         }
     }
-#endif
 }
 
 static const char *vkcapture_source_get_name(void *data)
@@ -375,7 +404,7 @@ static void vkcapture_source_get_defaults(obs_data_t *defaults)
 
 static obs_properties_t *vkcapture_source_get_properties(void *data)
 {
-    const vkcapture_source_t *ctx = data;
+    vkcapture_source_t *ctx = data;
 
     obs_properties_t *props = obs_properties_create();
 
@@ -399,11 +428,9 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
         obs_property_list_add_string(p, ctx->window, ctx->window);
     }
 
-#if HAVE_X11_XCB
-    if (ctx->cursor) {
+    if (cursor_enabled(ctx)) {
         obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
     }
-#endif
 
     obs_properties_add_bool(props, "allow_transparency", obs_module_text("AllowTransparency"));
 
