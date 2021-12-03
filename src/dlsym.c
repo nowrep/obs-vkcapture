@@ -44,8 +44,11 @@ static bool dl_init_funcs()
     eh_obj_t libdl;
     int ret = eh_find_obj(&libdl, "*libdl.so*");
     if (ret != 0) {
-        hlog("Failed to open libdl.so");
-        return false;
+        ret = eh_find_obj(&libdl, "*libc.so*");
+        if (ret != 0) {
+            hlog("Failed to open libdl.so and libc.so");
+            return false;
+        }
     }
 
     GETDLADDR(dlsym);
