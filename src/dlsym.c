@@ -25,13 +25,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 static bool dl_seen = false;
 static struct dl_funcs dl_f;
 
-#define GETDLADDR(func) \
-    ret = eh_find_sym(&libdl, #func, (void**)&dl_f.func); \
-    if (ret != 0 || !dl_f.func) { \
-        hlog("Failed to resolve " #func); \
-        return false; \
-    } \
-
 static bool dl_init_funcs()
 {
     if (dl_seen) {
@@ -43,17 +36,27 @@ static bool dl_init_funcs()
 
     eh_obj_t libdl;
     int ret = eh_find_obj(&libdl, "*libdl.so*");
-    if (ret != 0) {
-        ret = eh_find_obj(&libdl, "*libc.so*");
-        if (ret != 0) {
-            hlog("Failed to open libdl.so and libc.so");
-            return false;
+    if (ret == 0) {
+        eh_find_sym(&libdl, "dlsym", (void**)&dl_f.dlsym);
+        eh_find_sym(&libdl, "dlvsym", (void**)&dl_f.dlvsym);
+    }
+    eh_destroy_obj(&libdl);
+
+    if (!dl_f.dlsym) {
+        eh_obj_t libc;
+        int ret = eh_find_obj(&libc, "*libc.so*");
+        if (ret == 0) {
+            eh_find_sym(&libc, "dlsym", (void**)&dl_f.dlsym);
+            eh_find_sym(&libc, "dlvsym", (void**)&dl_f.dlvsym);
         }
+        eh_destroy_obj(&libc);
     }
 
-    GETDLADDR(dlsym);
-    GETDLADDR(dlvsym);
-    eh_destroy_obj(&libdl);
+    if (!dl_f.dlsym) {
+        hlog("Failed to open libdl.so and libc.so");
+        return false;
+    }
+
     dl_f.valid = true;
 
     return true;
