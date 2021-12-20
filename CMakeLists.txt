@@ -35,7 +35,7 @@ endif()
 
 option(BUILD_PLUGIN "Build OBS plugin" ON)
 
-if (${CMAKE_C_FLAGS} MATCHES "-m32")
+if (${CMAKE_SIZEOF_VOID_P} EQUAL 4)
     set(LAYER_SUFFIX "_32")
 else()
     set(LAYER_SUFFIX "_64")
