@@ -12,10 +12,6 @@ pkg_check_modules(XCB xcb IMPORTED_TARGET)
 pkg_check_modules(XCB_XFIXES xcb-xfixes IMPORTED_TARGET)
 pkg_check_modules(WAYLAND_CLIENT wayland-client IMPORTED_TARGET)
 
-if (NOT TARGET libobs)
-    find_package(LibObs REQUIRED)
-endif()
-
 if (VULKAN_FOUND AND NOT TARGET Vulkan::Vulkan)
     add_library(Vulkan::Vulkan UNKNOWN IMPORTED)
     set_target_properties(Vulkan::Vulkan PROPERTIES
@@ -44,6 +40,10 @@ endif()
 set(CMAKE_C_STANDARD 11)
 
 if (BUILD_PLUGIN)
+    if (NOT TARGET libobs)
+        find_package(LibObs REQUIRED)
+    endif()
+
     set(PLUGIN_SOURCES src/vkcapture.c)
     set(PLUGIN_LIBS libobs obs-frontend-api)
     if (HAVE_X11_XCB)
