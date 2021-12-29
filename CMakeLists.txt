@@ -93,6 +93,7 @@ target_include_directories(obs_glcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRE
 
 configure_file(plugin-macros.h.in ${CMAKE_CURRENT_BINARY_DIR}/plugin-macros.h @ONLY)
 configure_file(src/obs_vkcapture.json.in ${CMAKE_CURRENT_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json @ONLY)
+configure_file(src/obs-glcapture.in ${CMAKE_CURRENT_BINARY_DIR}/obs-glcapture @ONLY)
 
 install(TARGETS VkLayer_obs_vkcapture
     LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}")
@@ -106,5 +107,5 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
 install(PROGRAMS src/obs-vkcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
 
-install(PROGRAMS src/obs-glcapture
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/obs-glcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
