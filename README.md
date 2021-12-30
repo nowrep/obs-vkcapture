@@ -7,6 +7,10 @@ On X11 you need to explicitly enable EGL: `OBS_USE_EGL=1 obs`.
 
 AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
+Flatpak:
+* Capture tools: [org.freedesktop.Platform.VulkanLayer.OBSVkCapture](https://github.com/flathub/org.freedesktop.Platform.VulkanLayer.OBSVkCapture)
+* OBS plugin: [com.obsproject.Studio.Plugin.OBSVkCapture](https://github.com/flathub/com.obsproject.Studio.Plugin.OBSVkCapture)
+
 ## Building
 
     mkdir build && cd build
