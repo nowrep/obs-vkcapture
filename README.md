@@ -36,7 +36,8 @@ Flatpak:
 
 ## Troubleshooting
 
-**Cannot create EGLImage: Arguments are inconsistent**
+**Cannot create EGLImage: Arguments are inconsistent** \
+**Cannot create EGLImage: EGL cannot access a requested resource (for example a context is bound in another thread).**
 
 If you get this error with Vulkan capture, try starting the game with `OBS_VKCAPTURE_LINEAR=1` environment variable.
 

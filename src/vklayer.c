@@ -605,9 +605,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
                     modifier_props[i].drmFormatModifier,
                     modifier_props[i].drmFormatModifierPlaneCount);
 #endif
-            if (vkcapture_linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
-                continue;
-            }
             VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {};
             mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
             mod_info.drmFormatModifier = modifier_props[i].drmFormatModifier;
@@ -1436,10 +1433,14 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(GetImageSubresourceLayout);
     GETADDR(GetMemoryFdKHR);
 
-    dfuncs->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)
-        gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
-    if (!dfuncs->GetImageDrmFormatModifierPropertiesEXT) {
-        hlog("DRM format modifier support not available");
+    if (vkcapture_linear) {
+        dfuncs->GetImageDrmFormatModifierPropertiesEXT = NULL;
+    } else {
+        dfuncs->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)
+            gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
+        if (!dfuncs->GetImageDrmFormatModifierPropertiesEXT) {
+            hlog("DRM format modifier support not available");
+        }
     }
 
 #undef GETADDR
