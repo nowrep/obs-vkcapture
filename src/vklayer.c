@@ -768,33 +768,23 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         swap->dmabuf_modifier = DRM_FORMAT_MOD_INVALID;
     }
 
-    if (num_planes > 1) {
-        for (int i = 0; i < num_planes; i++) {
-            VkImageSubresource sbr = {};
-            sbr.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
-            sbr.mipLevel = 0;
-            sbr.arrayLayer = 0;
-            VkSubresourceLayout layout;
-            funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &layout);
-
-            swap->dmabuf_fds[i] = i == 0 ? fd : os_dupfd_cloexec(fd);
-            swap->dmabuf_strides[i] = layout.rowPitch;
-            swap->dmabuf_offsets[i] = layout.offset;
-        }
-        swap->dmabuf_nfd = num_planes;
-    } else {
+    for (int i = 0; i < num_planes; i++) {
         VkImageSubresource sbr = {};
+        if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
+            sbr.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+        } else {
+            sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
         sbr.mipLevel = 0;
         sbr.arrayLayer = 0;
-        sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         VkSubresourceLayout layout;
         funcs->GetImageSubresourceLayout(device, swap->export_image, &sbr, &layout);
 
-        swap->dmabuf_nfd = 1;
-        swap->dmabuf_fds[0] = fd;
-        swap->dmabuf_strides[0] = layout.rowPitch;
-        swap->dmabuf_offsets[0] = layout.offset;
+        swap->dmabuf_fds[i] = i == 0 ? fd : os_dupfd_cloexec(fd);
+        swap->dmabuf_strides[i] = layout.rowPitch;
+        swap->dmabuf_offsets[i] = layout.offset;
     }
+    swap->dmabuf_nfd = num_planes;
 
 #ifndef NDEBUG
     hlog("Got planes %d fd %d", swap->dmabuf_nfd, swap->dmabuf_fds[0]);
