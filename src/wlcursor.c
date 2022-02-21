@@ -38,6 +38,7 @@ struct output_data {
     int32_t pos_y;
     int32_t hotspot_x;
     int32_t hotspot_y;
+    bool damaged;
     bool have_cursor;
     gs_texture_t *tex;
 };
@@ -161,7 +162,7 @@ static void surface_handle_init_done(void *data_,
     zext_screencopy_surface_v1_damage_cursor_buffer(surface,
             "default");
     zext_screencopy_surface_v1_commit(surface,
-            ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_NONE);
+            ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_IMMEDIATE);
 }
 
 static void surface_handle_damage(void *data,
@@ -182,6 +183,7 @@ static void surface_handle_cursor_info(void *data_,
     data->pos_y = pos_y;
     data->hotspot_x = hotspot_x;
     data->hotspot_y = hotspot_y;
+    data->damaged = damaged;
 }
 
 static void surface_handle_cursor_enter(void *data_,
@@ -216,10 +218,15 @@ static void surface_handle_ready(void *data_,
 {
     struct output_data *data = data_;
 
-    gs_texture_set_image(data->tex, data->buffer_data,
-            data->buffer_stride, false);
+    if (data->damaged) {
+        gs_texture_set_image(data->tex, data->buffer_data,
+                data->buffer_stride, false);
+    }
 
-    surface_handle_init_done(data, surface);
+    zext_screencopy_surface_v1_attach_cursor_buffer(surface,
+            data->buffer, "default");
+    zext_screencopy_surface_v1_commit(surface,
+            ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_NONE);
 }
 
 static void surface_handle_failed(void *data,
