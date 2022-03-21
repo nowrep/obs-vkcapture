@@ -108,11 +108,11 @@ struct vk_device_funcs {
     DEF_FUNC(QueuePresentKHR);
     DEF_FUNC(AllocateMemory);
     DEF_FUNC(FreeMemory);
-    DEF_FUNC(BindImageMemory2);
+    DEF_FUNC(BindImageMemory2KHR);
     DEF_FUNC(GetSwapchainImagesKHR);
     DEF_FUNC(CreateImage);
     DEF_FUNC(DestroyImage);
-    DEF_FUNC(GetImageMemoryRequirements2);
+    DEF_FUNC(GetImageMemoryRequirements2KHR);
     DEF_FUNC(ResetCommandPool);
     DEF_FUNC(BeginCommandBuffer);
     DEF_FUNC(EndCommandBuffer);

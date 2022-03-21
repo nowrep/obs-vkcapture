@@ -673,7 +673,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     memr.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
     memr.pNext = &mdr;
 
-    funcs->GetImageMemoryRequirements2(device, &memri, &memr);
+    funcs->GetImageMemoryRequirements2KHR(device, &memri, &memr);
 
     /* -------------------------------------------------------- */
     /* get memory type index                                    */
@@ -726,9 +726,9 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     bimi.image = swap->export_image;
     bimi.memory = swap->export_mem;
     bimi.memoryOffset = 0;
-    res = funcs->BindImageMemory2(device, 1, &bimi);
+    res = funcs->BindImageMemory2KHR(device, 1, &bimi);
     if (VK_SUCCESS != res) {
-        hlog("BindImageMemory2 failed %s", result_to_str(res));
+        hlog("BindImageMemory2KHR failed %s", result_to_str(res));
         funcs->DestroyImage(device, swap->export_image, data->ac);
         swap->export_image = VK_NULL_HANDLE;
         return false;
@@ -1142,12 +1142,10 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     hlog("CreateInstance");
 #endif
 
-    VkInstanceCreateInfo info = *cinfo;
-
     /* -------------------------------------------------------- */
     /* step through chain until we get to the link info         */
 
-    VkLayerInstanceCreateInfo *lici = (VkLayerInstanceCreateInfo *)info.pNext;
+    VkLayerInstanceCreateInfo *lici = (VkLayerInstanceCreateInfo *)cinfo->pNext;
     while (lici && !is_inst_link_info(lici)) {
         lici = (VkLayerInstanceCreateInfo *)lici->pNext;
     }
@@ -1165,29 +1163,6 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     lici->u.pLayerInfo = lici->u.pLayerInfo->pNext;
 
     /* -------------------------------------------------------- */
-    /* (HACK) Set api version to 1.2 if set to 1.0              */
-    /* We do this to get our extensions working properly        */
-
-    const uint32_t apiVersion = 4202496; // VK_API_VERSION_1_2
-
-    VkApplicationInfo ai;
-    if (info.pApplicationInfo) {
-        ai = *info.pApplicationInfo;
-        if (ai.apiVersion < apiVersion)
-            ai.apiVersion = apiVersion;
-    } else {
-        ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        ai.pNext = NULL;
-        ai.pApplicationName = NULL;
-        ai.applicationVersion = 0;
-        ai.pEngineName = NULL;
-        ai.engineVersion = 0;
-        ai.apiVersion = apiVersion;
-    }
-
-    info.pApplicationInfo = &ai;
-
-    /* -------------------------------------------------------- */
     /* allocate data node                                       */
 
     struct vk_inst_data *idata = alloc_inst_data(ac);
@@ -1199,7 +1174,7 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
 
     PFN_vkCreateInstance create = (PFN_vkCreateInstance)gpa(NULL, "vkCreateInstance");
 
-    VkResult res = create(&info, ac, p_inst);
+    VkResult res = create(cinfo, ac, p_inst);
 #ifndef NDEBUG
     hlog("CreateInstance %s", result_to_str(res));
 #endif
@@ -1292,33 +1267,41 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     struct vk_inst_funcs *ifuncs = &idata->funcs;
     struct vk_data *data = NULL;
 
-    bool add_mem_fd_ext = true;
-    bool add_drm_mod_ext = true;
+    static struct {
+        const char *name;
+        bool found;
+    } req_extensions[] = {
+        VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false,              // VK_VERSION_1_1
+        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false,  // VK_VERSION_1_1
+        VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, false,
+        VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, false,
+    };
+    static uint32_t req_extensions_count = 4;
+
     for (uint32_t i = 0; i < info->enabledExtensionCount; ++i) {
-        if (!strcmp(info->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME)) {
-            add_mem_fd_ext = false;
-        } else if (!strcmp(info->ppEnabledExtensionNames[i], VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME)) {
-            add_drm_mod_ext = false;
+        for (uint32_t j = 0; j < req_extensions_count; ++j) {
+            if (!strcmp(info->ppEnabledExtensionNames[i], req_extensions[j].name)) {
+                req_extensions[j].found = true;
+            }
         }
     }
+
     int add_count = 0;
-    if (add_mem_fd_ext) {
-        add_count++;
-        hlog("Injecting %s extension", VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+    for (uint32_t i = 0; i < req_extensions_count; ++i) {
+        if (!req_extensions[i].found) {
+            add_count++;
+            hlog("Injecting %s extension", req_extensions[i].name);
+        }
     }
-    if (add_drm_mod_ext) {
-        add_count++;
-        hlog("Injecting %s extension", VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
-    }
+
     if (add_count) {
         int new_count = info->enabledExtensionCount + add_count;
         const char **exts = (const char**)malloc(sizeof(char*) * new_count);
         memcpy(exts, info->ppEnabledExtensionNames, sizeof(char*) * info->enabledExtensionCount);
-        if (add_mem_fd_ext) {
-            exts[new_count - add_count--] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
-        }
-        if (add_drm_mod_ext) {
-            exts[new_count - add_count--] = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME;
+        for (uint32_t i = 0; i < req_extensions_count; ++i) {
+            if (!req_extensions[i].found) {
+                exts[new_count - add_count--] = req_extensions[i].name;
+            }
         }
         VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)info;
         i->enabledExtensionCount = new_count;
@@ -1404,11 +1387,11 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(QueuePresentKHR);
     GETADDR(AllocateMemory);
     GETADDR(FreeMemory);
-    GETADDR(BindImageMemory2);
+    GETADDR(BindImageMemory2KHR);
     GETADDR(GetSwapchainImagesKHR);
     GETADDR(CreateImage);
     GETADDR(DestroyImage);
-    GETADDR(GetImageMemoryRequirements2);
+    GETADDR(GetImageMemoryRequirements2KHR);
     GETADDR(ResetCommandPool);
     GETADDR(BeginCommandBuffer);
     GETADDR(EndCommandBuffer);
