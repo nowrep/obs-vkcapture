@@ -32,7 +32,7 @@ Flatpak:
 
 ## Known Issues
 
-* Requires VK_EXT_external_memory_dma_buf - not available in NVIDIA proprietary driver
+* None
 
 ## Troubleshooting
 
