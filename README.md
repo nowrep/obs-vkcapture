@@ -32,7 +32,8 @@ Flatpak:
 
 ## Known Issues
 
-* Requires VK_EXT_external_memory_dma_buf - not available in NVIDIA proprietary driver
+* Vulkan capture requires VK_EXT_external_memory_dma_buf (NVIDIA driver >= 515.43.04)
+* OpenGL GLX capture doesn't work with NVIDIA driver
 
 ## Troubleshooting
 
