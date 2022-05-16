@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 typedef struct {
     struct wl_shm *shm;
-    struct zext_screencopy_manager_v1 *screencopy;
+    struct ext_screencopy_manager_v1 *screencopy;
     DARRAY(struct output_data*) outputs;
 } wl_cursor_t;
 

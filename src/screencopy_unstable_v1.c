@@ -37,11 +37,11 @@
 #define WL_PRIVATE
 #endif
 
+extern const struct wl_interface ext_screencopy_surface_v1_interface;
 extern const struct wl_interface wl_buffer_interface;
 extern const struct wl_interface wl_output_interface;
-extern const struct wl_interface zext_screencopy_surface_v1_interface;
 
-static const struct wl_interface *screencopy_unstable_v1_types[] = {
+static const struct wl_interface *ext_screencopy_v1_types[] = {
 	NULL,
 	NULL,
 	NULL,
@@ -50,7 +50,7 @@ static const struct wl_interface *screencopy_unstable_v1_types[] = {
 	NULL,
 	NULL,
 	NULL,
-	&zext_screencopy_surface_v1_interface,
+	&ext_screencopy_surface_v1_interface,
 	&wl_output_interface,
 	NULL,
 	&wl_buffer_interface,
@@ -58,42 +58,42 @@ static const struct wl_interface *screencopy_unstable_v1_types[] = {
 	NULL,
 };
 
-static const struct wl_message zext_screencopy_manager_v1_requests[] = {
-	{ "capture_output", "nou", screencopy_unstable_v1_types + 8 },
+static const struct wl_message ext_screencopy_manager_v1_requests[] = {
+	{ "capture_output", "nou", ext_screencopy_v1_types + 8 },
 };
 
-WL_PRIVATE const struct wl_interface zext_screencopy_manager_v1_interface = {
-	"zext_screencopy_manager_v1", 1,
-	1, zext_screencopy_manager_v1_requests,
+WL_PRIVATE const struct wl_interface ext_screencopy_manager_v1_interface = {
+	"ext_screencopy_manager_v1", 1,
+	1, ext_screencopy_manager_v1_requests,
 	0, NULL,
 };
 
-static const struct wl_message zext_screencopy_surface_v1_requests[] = {
-	{ "attach_buffer", "o", screencopy_unstable_v1_types + 11 },
-	{ "damage_buffer", "uuuu", screencopy_unstable_v1_types + 0 },
-	{ "attach_cursor_buffer", "os", screencopy_unstable_v1_types + 12 },
-	{ "damage_cursor_buffer", "s", screencopy_unstable_v1_types + 0 },
-	{ "commit", "u", screencopy_unstable_v1_types + 0 },
-	{ "destroy", "", screencopy_unstable_v1_types + 0 },
+static const struct wl_message ext_screencopy_surface_v1_requests[] = {
+	{ "attach_buffer", "o", ext_screencopy_v1_types + 11 },
+	{ "damage_buffer", "uuuu", ext_screencopy_v1_types + 0 },
+	{ "attach_cursor_buffer", "os", ext_screencopy_v1_types + 12 },
+	{ "damage_cursor_buffer", "s", ext_screencopy_v1_types + 0 },
+	{ "commit", "u", ext_screencopy_v1_types + 0 },
+	{ "destroy", "", ext_screencopy_v1_types + 0 },
 };
 
-static const struct wl_message zext_screencopy_surface_v1_events[] = {
-	{ "buffer_info", "uuuuu", screencopy_unstable_v1_types + 0 },
-	{ "cursor_buffer_info", "suuuuu", screencopy_unstable_v1_types + 0 },
-	{ "init_done", "", screencopy_unstable_v1_types + 0 },
-	{ "transform", "i", screencopy_unstable_v1_types + 0 },
-	{ "damage", "uuuu", screencopy_unstable_v1_types + 0 },
-	{ "cursor_enter", "s", screencopy_unstable_v1_types + 0 },
-	{ "cursor_leave", "s", screencopy_unstable_v1_types + 0 },
-	{ "cursor_info", "siiiiiii", screencopy_unstable_v1_types + 0 },
-	{ "failed", "u", screencopy_unstable_v1_types + 0 },
-	{ "commit_time", "uuu", screencopy_unstable_v1_types + 0 },
-	{ "ready", "", screencopy_unstable_v1_types + 0 },
+static const struct wl_message ext_screencopy_surface_v1_events[] = {
+	{ "buffer_info", "uuuuu", ext_screencopy_v1_types + 0 },
+	{ "cursor_buffer_info", "suuuuu", ext_screencopy_v1_types + 0 },
+	{ "init_done", "", ext_screencopy_v1_types + 0 },
+	{ "transform", "i", ext_screencopy_v1_types + 0 },
+	{ "damage", "uuuu", ext_screencopy_v1_types + 0 },
+	{ "cursor_enter", "s", ext_screencopy_v1_types + 0 },
+	{ "cursor_leave", "s", ext_screencopy_v1_types + 0 },
+	{ "cursor_info", "siiiiiii", ext_screencopy_v1_types + 0 },
+	{ "failed", "u", ext_screencopy_v1_types + 0 },
+	{ "commit_time", "uuu", ext_screencopy_v1_types + 0 },
+	{ "ready", "", ext_screencopy_v1_types + 0 },
 };
 
-WL_PRIVATE const struct wl_interface zext_screencopy_surface_v1_interface = {
-	"zext_screencopy_surface_v1", 1,
-	6, zext_screencopy_surface_v1_requests,
-	11, zext_screencopy_surface_v1_events,
+WL_PRIVATE const struct wl_interface ext_screencopy_surface_v1_interface = {
+	"ext_screencopy_surface_v1", 1,
+	6, ext_screencopy_surface_v1_requests,
+	11, ext_screencopy_surface_v1_events,
 };
 
