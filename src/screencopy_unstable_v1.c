@@ -50,16 +50,18 @@ static const struct wl_interface *ext_screencopy_v1_types[] = {
 	NULL,
 	NULL,
 	NULL,
+	NULL,
 	&ext_screencopy_surface_v1_interface,
 	&wl_output_interface,
 	NULL,
 	&wl_buffer_interface,
 	&wl_buffer_interface,
 	NULL,
+	NULL,
 };
 
 static const struct wl_message ext_screencopy_manager_v1_requests[] = {
-	{ "capture_output", "nou", ext_screencopy_v1_types + 8 },
+	{ "capture_output", "nou", ext_screencopy_v1_types + 9 },
 };
 
 WL_PRIVATE const struct wl_interface ext_screencopy_manager_v1_interface = {
@@ -69,23 +71,23 @@ WL_PRIVATE const struct wl_interface ext_screencopy_manager_v1_interface = {
 };
 
 static const struct wl_message ext_screencopy_surface_v1_requests[] = {
-	{ "attach_buffer", "o", ext_screencopy_v1_types + 11 },
+	{ "attach_buffer", "o", ext_screencopy_v1_types + 12 },
 	{ "damage_buffer", "uuuu", ext_screencopy_v1_types + 0 },
-	{ "attach_cursor_buffer", "os", ext_screencopy_v1_types + 12 },
-	{ "damage_cursor_buffer", "s", ext_screencopy_v1_types + 0 },
+	{ "attach_cursor_buffer", "osu", ext_screencopy_v1_types + 13 },
+	{ "damage_cursor_buffer", "su", ext_screencopy_v1_types + 0 },
 	{ "commit", "u", ext_screencopy_v1_types + 0 },
 	{ "destroy", "", ext_screencopy_v1_types + 0 },
 };
 
 static const struct wl_message ext_screencopy_surface_v1_events[] = {
 	{ "buffer_info", "uuuuu", ext_screencopy_v1_types + 0 },
-	{ "cursor_buffer_info", "suuuuu", ext_screencopy_v1_types + 0 },
+	{ "cursor_buffer_info", "suuuuuu", ext_screencopy_v1_types + 0 },
 	{ "init_done", "", ext_screencopy_v1_types + 0 },
 	{ "transform", "i", ext_screencopy_v1_types + 0 },
 	{ "damage", "uuuu", ext_screencopy_v1_types + 0 },
-	{ "cursor_enter", "s", ext_screencopy_v1_types + 0 },
-	{ "cursor_leave", "s", ext_screencopy_v1_types + 0 },
-	{ "cursor_info", "siiiiiii", ext_screencopy_v1_types + 0 },
+	{ "cursor_enter", "su", ext_screencopy_v1_types + 0 },
+	{ "cursor_leave", "su", ext_screencopy_v1_types + 0 },
+	{ "cursor_info", "suiiiiiii", ext_screencopy_v1_types + 0 },
 	{ "failed", "u", ext_screencopy_v1_types + 0 },
 	{ "commit_time", "uuu", ext_screencopy_v1_types + 0 },
 	{ "ready", "", ext_screencopy_v1_types + 0 },

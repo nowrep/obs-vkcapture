@@ -207,7 +207,7 @@ enum ext_screencopy_surface_v1_failure_reason {
 	EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_INVALID_CURSOR_BUFFER = 2,
 	EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_OUTPUT_MISSING = 3,
 	EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_OUTPUT_DISABLED = 4,
-	EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_SEAT = 5,
+	EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_INPUT = 5,
 };
 #endif /* EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_ENUM */
 
@@ -217,6 +217,14 @@ enum ext_screencopy_surface_v1_options {
 	EXT_SCREENCOPY_SURFACE_V1_OPTIONS_ON_DAMAGE = 1,
 };
 #endif /* EXT_SCREENCOPY_SURFACE_V1_OPTIONS_ENUM */
+
+#ifndef EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_ENUM
+#define EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_ENUM
+enum ext_screencopy_surface_v1_input_type {
+	EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER = 0,
+	EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_TABLET = 1,
+};
+#endif /* EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_ENUM */
 
 #ifndef EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_ENUM
 #define EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_ENUM
@@ -258,14 +266,15 @@ struct ext_screencopy_surface_v1_listener {
 	 * Provides information about buffer parameters that need to be
 	 * used for the cursor image. This event is sent for every
 	 * supported buffer type after the surface is created, and it may
-	 * be different for each seat.
+	 * be different for each seat/input_type pair.
 	 *
 	 * The default seat will be referred to as "default" within this
 	 * protocol, whether it be named so by the compositor or not.
 	 *
 	 * The stride parameter is invalid for dmabuf and may be set to 0.
 	 * @param seat_name seat name
-	 * @param type buffer type
+	 * @param input_type input type
+	 * @param buffer_type buffer type
 	 * @param format buffer drm format
 	 * @param width minimum buffer width
 	 * @param height minimum buffer height
@@ -274,7 +283,8 @@ struct ext_screencopy_surface_v1_listener {
 	void (*cursor_buffer_info)(void *data,
 				   struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1,
 				   const char *seat_name,
-				   uint32_t type,
+				   uint32_t input_type,
+				   uint32_t buffer_type,
 				   uint32_t format,
 				   uint32_t width,
 				   uint32_t height,
@@ -292,6 +302,10 @@ struct ext_screencopy_surface_v1_listener {
 	 *
 	 * This event is sent before the ready event and holds the output
 	 * transform of the source buffer.
+	 *
+	 * Note: This only applies to the main buffer, not the cursor
+	 * buffer. The cursor buffer must always be sent without any
+	 * rotation.
 	 */
 	void (*transform)(void *data,
 			  struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1,
@@ -325,20 +339,24 @@ struct ext_screencopy_surface_v1_listener {
 	 * generated before the "cursor_info" event when and only when a
 	 * cursor enters the surface.
 	 * @param seat_name seat name
+	 * @param input_type input type
 	 */
 	void (*cursor_enter)(void *data,
 			     struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1,
-			     const char *seat_name);
+			     const char *seat_name,
+			     uint32_t input_type);
 	/**
 	 * cursor left surface
 	 *
 	 * Sent when a cursor leaves the captured surface. No
 	 * "cursor_info" event is generated for for the given cursor.
 	 * @param seat_name seat name
+	 * @param input_type input type
 	 */
 	void (*cursor_leave)(void *data,
 			     struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1,
-			     const char *seat_name);
+			     const char *seat_name,
+			     uint32_t input_type);
 	/**
 	 * cursor specific information
 	 *
@@ -355,8 +373,11 @@ struct ext_screencopy_surface_v1_listener {
 	 * otherwise 0.
 	 *
 	 * The given position is the position of the cursor's hotspot and
-	 * it is relative to the main buffer's top left corner in buffer
-	 * pixel coordinates.
+	 * it is relative to the main buffer's top left corner in
+	 * transformed buffer pixel coordinates.
+	 *
+	 * The hotspot coordinates are relative to the cursor buffers upper
+	 * left corner.
 	 * @param seat_name seat name
 	 * @param has_damage buffer has changes
 	 * @param position_x position x coordinates
@@ -369,6 +390,7 @@ struct ext_screencopy_surface_v1_listener {
 	void (*cursor_info)(void *data,
 			    struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1,
 			    const char *seat_name,
+			    uint32_t input_type,
 			    int32_t has_damage,
 			    int32_t position_x,
 			    int32_t position_y,
@@ -560,17 +582,18 @@ ext_screencopy_surface_v1_damage_buffer(struct ext_screencopy_surface_v1 *ext_sc
 /**
  * @ingroup iface_ext_screencopy_surface_v1
  *
- * Attach a named cursor buffer to the surface.
+ * Attach a cursor buffer to the surface. The cursor for the given seat and
+ * input type will be copied to the buffer.
  *
  * The cursor buffer may exceed the dimensions specified in the
  * "cursor_buffer_info" event. The cursor image will be drawn in the top,
  * left corner of the buffer.
  */
 static inline void
-ext_screencopy_surface_v1_attach_cursor_buffer(struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1, struct wl_buffer *buffer, const char *seat_name)
+ext_screencopy_surface_v1_attach_cursor_buffer(struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1, struct wl_buffer *buffer, const char *seat_name, uint32_t input_type)
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) ext_screencopy_surface_v1,
-			 EXT_SCREENCOPY_SURFACE_V1_ATTACH_CURSOR_BUFFER, NULL, wl_proxy_get_version((struct wl_proxy *) ext_screencopy_surface_v1), 0, buffer, seat_name);
+			 EXT_SCREENCOPY_SURFACE_V1_ATTACH_CURSOR_BUFFER, NULL, wl_proxy_get_version((struct wl_proxy *) ext_screencopy_surface_v1), 0, buffer, seat_name, input_type);
 }
 
 /**
@@ -581,10 +604,10 @@ ext_screencopy_surface_v1_attach_cursor_buffer(struct ext_screencopy_surface_v1 
  * The whole cursor buffer will be considered damaged.
  */
 static inline void
-ext_screencopy_surface_v1_damage_cursor_buffer(struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1, const char *seat_name)
+ext_screencopy_surface_v1_damage_cursor_buffer(struct ext_screencopy_surface_v1 *ext_screencopy_surface_v1, const char *seat_name, uint32_t input_type)
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) ext_screencopy_surface_v1,
-			 EXT_SCREENCOPY_SURFACE_V1_DAMAGE_CURSOR_BUFFER, NULL, wl_proxy_get_version((struct wl_proxy *) ext_screencopy_surface_v1), 0, seat_name);
+			 EXT_SCREENCOPY_SURFACE_V1_DAMAGE_CURSOR_BUFFER, NULL, wl_proxy_get_version((struct wl_proxy *) ext_screencopy_surface_v1), 0, seat_name, input_type);
 }
 
 /**

@@ -121,6 +121,7 @@ static void surface_handle_buffer_info(void *data,
 
 static void surface_handle_cursor_buffer_info(void *data_,
         struct ext_screencopy_surface_v1 *surface, const char *name,
+        enum ext_screencopy_surface_v1_input_type input_type,
         uint32_t type, uint32_t format, uint32_t width, uint32_t height,
         uint32_t stride)
 {
@@ -158,9 +159,10 @@ static void surface_handle_init_done(void *data_,
     }
 
     ext_screencopy_surface_v1_attach_cursor_buffer(surface,
-            data->buffer, "default");
+            data->buffer, "default",
+            EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
     ext_screencopy_surface_v1_damage_cursor_buffer(surface,
-            "default");
+            "default", EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
     ext_screencopy_surface_v1_commit(surface,
             EXT_SCREENCOPY_SURFACE_V1_OPTIONS_ON_DAMAGE);
 }
@@ -172,8 +174,9 @@ static void surface_handle_damage(void *data,
 }
 
 static void surface_handle_cursor_info(void *data_,
-        struct ext_screencopy_surface_v1 *surface,
-        const char *name, int damaged, int32_t pos_x, int32_t pos_y,
+        struct ext_screencopy_surface_v1 *surface, const char *name,
+        enum ext_screencopy_surface_v1_input_type input_type,
+        int damaged, int32_t pos_x, int32_t pos_y,
         int32_t width, int32_t height, int32_t hotspot_x,
         int32_t hotspot_y)
 {
@@ -188,7 +191,7 @@ static void surface_handle_cursor_info(void *data_,
 
 static void surface_handle_cursor_enter(void *data_,
         struct ext_screencopy_surface_v1 *surface,
-        const char *name)
+        const char *seat_name, uint32_t input_type)
 {
     struct output_data *data = data_;
     data->have_cursor = true;
@@ -196,7 +199,7 @@ static void surface_handle_cursor_enter(void *data_,
 
 static void surface_handle_cursor_leave(void *data_,
         struct ext_screencopy_surface_v1 *surface,
-        const char *name)
+        const char *seat_name, uint32_t input_type)
 {
     struct output_data *data = data_;
     data->have_cursor = false;
@@ -224,7 +227,8 @@ static void surface_handle_ready(void *data_,
     }
 
     ext_screencopy_surface_v1_attach_cursor_buffer(surface,
-            data->buffer, "default");
+            data->buffer, "default",
+            EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
     ext_screencopy_surface_v1_commit(surface,
             EXT_SCREENCOPY_SURFACE_V1_OPTIONS_ON_DAMAGE);
 }
