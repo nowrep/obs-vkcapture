@@ -256,6 +256,10 @@ static const struct ext_screencopy_surface_v1_listener surface_listener = {
 
 static void capture_output(struct output_data *data)
 {
+    if (data->surface || !data->ctx->screencopy) {
+        return;
+    }
+
     data->surface =
         ext_screencopy_manager_v1_capture_output(data->ctx->screencopy, data->output, 0);
     ext_screencopy_surface_v1_add_listener(data->surface, &surface_listener, data);
@@ -272,6 +276,7 @@ static void handle_global(void *data, struct wl_registry *registry,
         output_data->id = name;
         output_data->output = wl_registry_bind(registry, name, &wl_output_interface, 1);
         da_push_back(ctx->outputs, &output_data);
+        capture_output(output_data);
     } else if (!strcmp(interface, wl_shm_interface.name)) {
         ctx->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
     } else if (!strcmp(interface, ext_screencopy_manager_v1_interface.name)) {
