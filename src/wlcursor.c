@@ -43,6 +43,8 @@ struct output_data {
     gs_texture_t *tex;
 };
 
+static void capture_output(struct output_data *data);
+
 static void output_data_reset(struct output_data *data)
 {
     if (data->buffer) {
@@ -61,6 +63,8 @@ static void output_data_reset(struct output_data *data)
         gs_texture_destroy(data->tex);
         data->tex = NULL;
     }
+    data->damaged = false;
+    data->have_cursor = false;
 }
 
 static enum wl_shm_format drm_format_to_wl_shm(uint32_t in)
@@ -233,10 +237,18 @@ static void surface_handle_ready(void *data_,
             EXT_SCREENCOPY_SURFACE_V1_OPTIONS_ON_DAMAGE);
 }
 
-static void surface_handle_failed(void *data,
+static void surface_handle_failed(void *data_,
     struct ext_screencopy_surface_v1 *surface,
     enum ext_screencopy_surface_v1_failure_reason reason)
 {
+    struct output_data *data = data_;
+    output_data_reset(data);
+
+    if (reason == EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_OUTPUT_DISABLED) {
+        capture_output(data);
+        return;
+    }
+
     blog(LOG_ERROR, "failed to copy surface %d", reason);
 }
 
