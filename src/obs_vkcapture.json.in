@@ -4,7 +4,7 @@
         "name": "VK_LAYER_OBS_vkcapture@LAYER_SUFFIX@",
         "type": "GLOBAL",
         "library_path": "@CMAKE_INSTALL_FULL_LIBDIR@/libVkLayer_obs_vkcapture.so",
-        "api_version": "1.3.221",
+        "api_version": "@Vulkan_VERSION@",
         "implementation_version": "1",
         "description": "OBS Linux game capture",
         "functions": {
