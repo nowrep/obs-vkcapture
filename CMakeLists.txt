@@ -17,6 +17,8 @@ if (VULKAN_FOUND AND NOT TARGET Vulkan::Vulkan)
     set_target_properties(Vulkan::Vulkan PROPERTIES
         IMPORTED_LOCATION "${VULKAN_LIBRARIES}"
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INCLUDE_DIRS}")
+endif()
+if (NOT Vulkan_VERSION)
     set(Vulkan_VERSION "1.3.221")
 endif()
 
