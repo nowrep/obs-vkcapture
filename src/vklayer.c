@@ -119,6 +119,7 @@ struct vk_data {
     struct vk_swap_data *cur_swap;
 
     struct vk_obj_list queues;
+    VkQueue graphics_queue;
 
     VkExternalMemoryProperties external_mem_props;
 
@@ -275,6 +276,7 @@ static void free_device_data(struct vk_data *data,
 static struct vk_queue_data *add_queue_data(struct vk_data *data, VkQueue queue,
         uint32_t fam_idx,
         bool supports_transfer,
+        bool supports_graphics,
         const VkAllocationCallbacks *ac)
 {
     struct vk_queue_data *const queue_data =
@@ -287,6 +289,8 @@ static struct vk_queue_data *add_queue_data(struct vk_data *data, VkQueue queue,
     queue_data->frames = NULL;
     queue_data->frame_index = 0;
     queue_data->frame_count = 0;
+    if (supports_graphics)
+        data->graphics_queue = queue;
     return queue_data;
 }
 
@@ -1126,11 +1130,10 @@ static VkResult VKAPI_CALL OBS_QueuePresentKHR(VkQueue queue,
         const VkPresentInfoKHR *info)
 {
     struct vk_data *const data = get_device_data_by_queue(queue);
-    struct vk_queue_data *const queue_data = get_queue_data(data, queue);
     struct vk_device_funcs *const funcs = &data->funcs;
 
-    if (data->valid && queue_data->supports_transfer) {
-        vk_capture(data, queue, info);
+    if (data->valid) {
+        vk_capture(data, data->graphics_queue ? data->graphics_queue : queue, info);
     }
 
     return funcs->QueuePresentKHR(queue, info);
@@ -1513,8 +1516,12 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
                  .queueFlags &
                  (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |
                   VK_QUEUE_TRANSFER_BIT)) != 0;
+            const bool supports_graphics =
+                (queue_family_properties[family_index]
+                 .queueFlags &
+                 (VK_QUEUE_GRAPHICS_BIT)) != 0;
             add_queue_data(data, queue, family_index,
-                    supports_transfer, ac);
+                    supports_transfer, supports_graphics, ac);
         }
     }
 
