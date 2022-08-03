@@ -11,6 +11,16 @@ Flatpak:
 * Capture tools: [org.freedesktop.Platform.VulkanLayer.OBSVkCapture](https://github.com/flathub/org.freedesktop.Platform.VulkanLayer.OBSVkCapture)
 * OBS plugin: [com.obsproject.Studio.Plugin.OBSVkCapture](https://github.com/flathub/com.obsproject.Studio.Plugin.OBSVkCapture)
 
+## Dependencies
+
+* cmake
+* libobs
+* libvulkan
+* libgl
+* libX11 (optional)
+* libxcb (optional)
+* libwayland-client (optional)
+
 ## Building
 
     mkdir build && cd build
