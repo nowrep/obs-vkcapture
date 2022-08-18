@@ -811,6 +811,16 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     return true;
 }
 
+static int to_drm_format(VkFormat format)
+{
+    const bool alpha = vk_format_has_alpha(format);
+    if (vk_format_is_rgb(format)) {
+        return alpha ? DRM_FORMAT_ABGR8888 : DRM_FORMAT_XBGR8888;
+    } else {
+        return alpha ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_XRGB8888;
+    }
+}
+
 static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 {
     if (!vk_shtex_init_vulkan_tex(data, swap)) {
@@ -820,7 +830,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
-        vk_format_has_alpha(swap->format) ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_XRGB8888,
+        to_drm_format(swap->format),
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
         swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
 

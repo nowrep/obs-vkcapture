@@ -27,6 +27,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
         ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
 #define DRM_FORMAT_XRGB8888 fourcc_code('X', 'R', '2', '4')
 #define DRM_FORMAT_ARGB8888 fourcc_code('A', 'R', '2', '4')
+#define DRM_FORMAT_XBGR8888 fourcc_code('X', 'B', '2', '4')
+#define DRM_FORMAT_ABGR8888 fourcc_code('A', 'B', '2', '4')
 #define fourcc_mod_code(vendor, val) ((((uint64_t)vendor) << 56) | ((val) & 0x00ffffffffffffffULL))
 #define DRM_FORMAT_MOD_INVALID fourcc_mod_code(0, ((1ULL << 56) - 1))
 #define DRM_FORMAT_MOD_LINEAR fourcc_mod_code(0, 0)
