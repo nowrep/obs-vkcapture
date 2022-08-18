@@ -728,7 +728,12 @@ static void *server_thread_run(void *data)
 
 bool obs_module_load(void)
 {
-    if (obs_get_nix_platform() != OBS_NIX_PLATFORM_X11_EGL && obs_get_nix_platform() != OBS_NIX_PLATFORM_WAYLAND) {
+    enum obs_nix_platform_type platform = obs_get_nix_platform();
+#if HAVE_WAYLAND
+    if (platform != OBS_NIX_PLATFORM_X11_EGL && platform != OBS_NIX_PLATFORM_WAYLAND) {
+#else
+    if (platform != OBS_NIX_PLATFORM_X11_EGL) {
+#endif
         blog(LOG_ERROR, "linux-vkcapture cannot run on non-EGL platforms");
         return false;
     }
