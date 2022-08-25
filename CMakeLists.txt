@@ -107,7 +107,6 @@ target_include_directories(obs_glcapture PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRE
 
 configure_file(plugin-macros.h.in ${CMAKE_CURRENT_BINARY_DIR}/plugin-macros.h @ONLY)
 configure_file(src/obs_vkcapture.json.in ${CMAKE_CURRENT_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json @ONLY)
-configure_file(src/obs-glcapture.in ${CMAKE_CURRENT_BINARY_DIR}/obs-glcapture @ONLY)
 configure_file(src/obs-gamecapture.in ${CMAKE_CURRENT_BINARY_DIR}/obs-gamecapture @ONLY)
 
 install(TARGETS VkLayer_obs_vkcapture
@@ -119,11 +118,6 @@ install(TARGETS obs_glcapture
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
     DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/vulkan/implicit_layer.d")
 
-install(PROGRAMS src/obs-vkcapture
-    DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
-
-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/obs-glcapture
-    DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
-
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/obs-gamecapture
+    src/obs-vkcapture src/obs-glcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
