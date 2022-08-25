@@ -17,12 +17,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "wlcursor.h"
+#include "capture.h"
 
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <libdrm/drm_fourcc.h>
 
 struct output_data {
     wl_cursor_t *ctx;
