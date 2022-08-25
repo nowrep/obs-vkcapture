@@ -30,7 +30,7 @@ Flatpak:
 ## Usage
 
 1. Add `Game Capture` to your OBS scene.
-2. Start the game with capture enabled `obs-gamecapture game`.
+2. Start the game with capture enabled `obs-gamecapture %command%`.
 
 ## Known Issues
 
