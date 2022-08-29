@@ -62,6 +62,7 @@ struct vk_swap_data {
     VkFormat format;
     uint32_t winid;
     VkImage export_image;
+    VkFormat export_format;
     VkDeviceMemory export_mem;
     VkImage *swap_images;
     uint32_t image_count;
@@ -560,11 +561,18 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
+    if (swap->format == VK_FORMAT_B8G8R8A8_UNORM || swap->format == VK_FORMAT_R8G8B8A8_UNORM) {
+        swap->export_format = swap->format;
+    } else {
+        swap->export_format = VK_FORMAT_B8G8R8A8_UNORM;
+        hlog("Converting to %s", vk_format_to_str(swap->export_format));
+    }
+
     // create image (for dedicated allocation)
     VkImageCreateInfo img_info = {};
     img_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     img_info.imageType = VK_IMAGE_TYPE_2D;
-    img_info.format = swap->format;
+    img_info.format = swap->export_format;
     img_info.mipLevels = 1;
     img_info.arrayLayers = 1;
     img_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -813,16 +821,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     return true;
 }
 
-static int to_drm_format(VkFormat format)
-{
-    const bool alpha = vk_format_has_alpha(format);
-    if (vk_format_is_rgb(format)) {
-        return alpha ? DRM_FORMAT_ABGR8888 : DRM_FORMAT_XBGR8888;
-    } else {
-        return alpha ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_XRGB8888;
-    }
-}
-
 static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 {
     if (!vk_shtex_init_vulkan_tex(data, swap)) {
@@ -832,7 +830,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
-        to_drm_format(swap->format),
+        swap->export_format == VK_FORMAT_B8G8R8A8_UNORM ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_ABGR8888,
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
         swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
 
@@ -1030,28 +1028,57 @@ static void vk_shtex_capture(struct vk_data *data,
     /* ------------------------------------------------------ */
     /* copy cur_backbuffer's content to our interop image     */
 
-    VkImageCopy cpy;
-    cpy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    cpy.srcSubresource.mipLevel = 0;
-    cpy.srcSubresource.baseArrayLayer = 0;
-    cpy.srcSubresource.layerCount = 1;
-    cpy.srcOffset.x = 0;
-    cpy.srcOffset.y = 0;
-    cpy.srcOffset.z = 0;
-    cpy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    cpy.dstSubresource.mipLevel = 0;
-    cpy.dstSubresource.baseArrayLayer = 0;
-    cpy.dstSubresource.layerCount = 1;
-    cpy.dstOffset.x = 0;
-    cpy.dstOffset.y = 0;
-    cpy.dstOffset.z = 0;
-    cpy.extent.width = swap->image_extent.width;
-    cpy.extent.height = swap->image_extent.height;
-    cpy.extent.depth = 1;
-    funcs->CmdCopyImage(cmd_buffer, cur_backbuffer,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            swap->export_image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
+    if (swap->format != swap->export_format) {
+        VkImageBlit blt;
+        blt.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blt.srcSubresource.mipLevel = 0;
+        blt.srcSubresource.baseArrayLayer = 0;
+        blt.srcSubresource.layerCount = 1;
+        blt.srcOffsets[0].x = 0;
+        blt.srcOffsets[0].y = 0;
+        blt.srcOffsets[0].z = 0;
+        blt.srcOffsets[1].x = swap->image_extent.width;
+        blt.srcOffsets[1].y = swap->image_extent.height;
+        blt.srcOffsets[1].z = 0;
+        blt.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blt.dstSubresource.mipLevel = 0;
+        blt.dstSubresource.baseArrayLayer = 0;
+        blt.dstSubresource.layerCount = 1;
+        blt.dstOffsets[0].x = 0;
+        blt.dstOffsets[0].y = 0;
+        blt.dstOffsets[0].z = 0;
+        blt.dstOffsets[1].x = swap->image_extent.width;
+        blt.dstOffsets[1].y = swap->image_extent.height;
+        blt.dstOffsets[1].z = 0;
+        funcs->CmdBlitImage(cmd_buffer, cur_backbuffer,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                swap->export_image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blt,
+                VK_FILTER_NEAREST);
+    } else {
+        VkImageCopy cpy;
+        cpy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        cpy.srcSubresource.mipLevel = 0;
+        cpy.srcSubresource.baseArrayLayer = 0;
+        cpy.srcSubresource.layerCount = 1;
+        cpy.srcOffset.x = 0;
+        cpy.srcOffset.y = 0;
+        cpy.srcOffset.z = 0;
+        cpy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        cpy.dstSubresource.mipLevel = 0;
+        cpy.dstSubresource.baseArrayLayer = 0;
+        cpy.dstSubresource.layerCount = 1;
+        cpy.dstOffset.x = 0;
+        cpy.dstOffset.y = 0;
+        cpy.dstOffset.z = 0;
+        cpy.extent.width = swap->image_extent.width;
+        cpy.extent.height = swap->image_extent.height;
+        cpy.extent.depth = 1;
+        funcs->CmdCopyImage(cmd_buffer, cur_backbuffer,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                swap->export_image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
+    }
 
     /* ------------------------------------------------------ */
     /* Restore the swap chain image layout to what it was
@@ -1422,6 +1449,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(BeginCommandBuffer);
     GETADDR(EndCommandBuffer);
     GETADDR(CmdCopyImage);
+    GETADDR(CmdBlitImage);
     GETADDR(CmdPipelineBarrier);
     GETADDR(GetDeviceQueue);
     GETADDR(QueueSubmit);
