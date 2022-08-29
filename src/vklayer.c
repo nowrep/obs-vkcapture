@@ -36,6 +36,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 /* use the loader's dispatch table pointer as a key for internal data maps */
 #define GET_LDT(x) (*(void **)x)
 
+/* #define DEBUG_EXTRA 1 */
+
 static bool vulkan_seen = false;
 
 static bool vkcapture_linear = false;
@@ -864,7 +866,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
 
         VkResult res = data->funcs.CreateCommandPool(
                 device, &cpci, data->ac, &frame_data->cmd_pool);
-#ifndef NDEBUG
+#ifdef DEBUG_EXTRA
         hlog("CreateCommandPool %s", result_to_str(res));
 #endif
 
@@ -877,7 +879,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
 
         res = data->funcs.AllocateCommandBuffers(
                 device, &cbai, &frame_data->cmd_buffer);
-#ifndef NDEBUG
+#ifdef DEBUG_EXTRA
         hlog("AllocateCommandBuffers %s", result_to_str(res));
 #endif
         GET_LDT(frame_data->cmd_buffer) = GET_LDT(device);
@@ -888,7 +890,7 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
         fci.flags = 0;
         res = data->funcs.CreateFence(device, &fci, data->ac,
                &frame_data->fence);
-#ifndef NDEBUG
+#ifdef DEBUG_EXTRA
         hlog("CreateFence %s", result_to_str(res));
 #endif
     }
@@ -973,14 +975,14 @@ static void vk_shtex_capture(struct vk_data *data,
 
     res = funcs->ResetCommandPool(device, frame_data->cmd_pool, 0);
 
-#ifndef NDEBUG
+#ifdef DEBUG_EXTRA
     hlog("ResetCommandPool %s", result_to_str(res));
 #endif
 
     const VkCommandBuffer cmd_buffer = frame_data->cmd_buffer;
     res = funcs->BeginCommandBuffer(cmd_buffer, &begin_info);
 
-#ifndef NDEBUG
+#ifdef DEBUG_EXTRA
     hlog("BeginCommandBuffer %s", result_to_str(res));
 #endif
 
@@ -1092,7 +1094,7 @@ static void vk_shtex_capture(struct vk_data *data,
     const VkFence fence = frame_data->fence;
     res = funcs->QueueSubmit(queue, 1, &submit_info, fence);
 
-#ifndef NDEBUG
+#ifdef DEBUG_EXTRA
     hlog("QueueSubmit %s", result_to_str(res));
 #endif
 
