@@ -7,9 +7,15 @@ On X11 you need to explicitly enable EGL: `OBS_USE_EGL=1 obs`.
 
 AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
-Flatpak:
-* Capture tools: [org.freedesktop.Platform.VulkanLayer.OBSVkCapture](https://github.com/flathub/org.freedesktop.Platform.VulkanLayer.OBSVkCapture)
+**Flatpak:**
 * OBS plugin: [com.obsproject.Studio.Plugin.OBSVkCapture](https://github.com/flathub/com.obsproject.Studio.Plugin.OBSVkCapture)
+* Capture tools: [org.freedesktop.Platform.VulkanLayer.OBSVkCapture](https://github.com/flathub/org.freedesktop.Platform.VulkanLayer.OBSVkCapture)
+
+## About Flatpak
+If you use Flatpak OBS, you need to install Flatpak *OBS plugin*.  
+If you use Flatpak Steam, you need to install Flatpak *Capture tools* to be able to capture games running inside Flatpak Steam runtine.
+
+For capturing games outside Flatpak runtime, you need native build regardless of if you are using Flatpak OBS or not.
 
 ## Dependencies
 
