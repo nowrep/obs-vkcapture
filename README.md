@@ -2,7 +2,7 @@
 
 OBS plugin for Vulkan/OpenGL game capture on Linux.
 
-Requires OBS 27.
+Requires OBS >= 27.
 On X11 you need to explicitly enable EGL: `OBS_USE_EGL=1 obs`.
 
 AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
