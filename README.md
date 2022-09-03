@@ -30,7 +30,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 ## Building
 
     mkdir build && cd build
-    cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib ..
+    cmake -DCMAKE_INSTALL_PREFIX=/usr ..
     make && make install
 
 ## Usage
