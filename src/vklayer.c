@@ -552,6 +552,30 @@ static void remove_free_inst_data(VkInstance inst,
 /* ======================================================================== */
 /* capture                                                                  */
 
+static bool vk_format_requires_conversion(VkFormat format)
+{
+    switch (format) {
+    case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_R8G8B8A8_UNORM:
+    case VK_FORMAT_B8G8R8A8_SRGB:
+    case VK_FORMAT_R8G8B8A8_SRGB:
+        return false;
+    default:
+        return true;
+    }
+}
+
+static bool vk_format_is_bgra(VkFormat format)
+{
+    switch (format) {
+    case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_B8G8R8A8_SRGB:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         struct vk_swap_data *swap)
 {
@@ -561,7 +585,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
-    if (swap->format == VK_FORMAT_B8G8R8A8_UNORM || swap->format == VK_FORMAT_R8G8B8A8_UNORM) {
+    if (!vk_format_requires_conversion(swap->format)) {
         swap->export_format = swap->format;
     } else {
         swap->export_format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -830,7 +854,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
-        swap->export_format == VK_FORMAT_B8G8R8A8_UNORM ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_ABGR8888,
+        vk_format_is_bgra(swap->export_format) ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_ABGR8888,
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
         swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
 
