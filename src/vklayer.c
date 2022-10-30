@@ -1344,46 +1344,23 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     struct vk_inst_funcs *ifuncs = &idata->funcs;
     struct vk_data *data = NULL;
 
-    static struct {
-        const char *name;
-        bool found;
-    } req_extensions[] = {
-        VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false,              // VK_VERSION_1_1
-        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false,  // VK_VERSION_1_1
-        VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, false,
-        VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, false,
+    const char *req_extensions[] = {
+        VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,              // VK_VERSION_1_1
+        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,  // VK_VERSION_1_1
+        VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+        VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
     };
     static uint32_t req_extensions_count = 4;
 
-    for (uint32_t i = 0; i < info->enabledExtensionCount; ++i) {
-        for (uint32_t j = 0; j < req_extensions_count; ++j) {
-            if (!strcmp(info->ppEnabledExtensionNames[i], req_extensions[j].name)) {
-                req_extensions[j].found = true;
-            }
-        }
-    }
-
-    int add_count = 0;
+    int new_count = info->enabledExtensionCount + req_extensions_count;
+    const char **exts = (const char**)malloc(sizeof(char*) * new_count);
+    memcpy(exts, info->ppEnabledExtensionNames, sizeof(char*) * info->enabledExtensionCount);
     for (uint32_t i = 0; i < req_extensions_count; ++i) {
-        if (!req_extensions[i].found) {
-            add_count++;
-            hlog("Injecting %s extension", req_extensions[i].name);
-        }
+        exts[info->enabledExtensionCount + i] = req_extensions[i];
     }
-
-    if (add_count) {
-        int new_count = info->enabledExtensionCount + add_count;
-        const char **exts = (const char**)malloc(sizeof(char*) * new_count);
-        memcpy(exts, info->ppEnabledExtensionNames, sizeof(char*) * info->enabledExtensionCount);
-        for (uint32_t i = 0; i < req_extensions_count; ++i) {
-            if (!req_extensions[i].found) {
-                exts[new_count - add_count--] = req_extensions[i].name;
-            }
-        }
-        VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)info;
-        i->enabledExtensionCount = new_count;
-        i->ppEnabledExtensionNames = exts;
-    }
+    VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)info;
+    i->enabledExtensionCount = new_count;
+    i->ppEnabledExtensionNames = exts;
 
     VkResult ret = VK_ERROR_INITIALIZATION_FAILED;
 
