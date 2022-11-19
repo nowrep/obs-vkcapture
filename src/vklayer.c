@@ -402,7 +402,6 @@ static void vk_shtex_clear_fence(const struct vk_data *data,
 static void vk_shtex_wait_until_pool_idle(struct vk_data *data,
         struct vk_queue_data *queue_data)
 {
-    return;
     for (uint32_t frame_idx = 0; frame_idx < queue_data->frame_count;
             frame_idx++) {
         struct vk_frame_data *frame_data =
