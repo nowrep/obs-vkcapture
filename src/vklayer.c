@@ -601,7 +601,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.arrayLayers = 1;
     img_info.samples = VK_SAMPLE_COUNT_1_BIT;
     img_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    img_info.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    img_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_info.extent.width = swap->image_extent.width;
     img_info.extent.height = swap->image_extent.height;
     img_info.extent.depth = 1;
@@ -684,6 +684,11 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             image_modifier_list.pDrmFormatModifiers = image_modifiers;
             img_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
             img_info.pNext = &image_modifier_list;
+
+            VkExternalMemoryImageCreateInfo ext_mem_image_info = {};
+            ext_mem_image_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+            ext_mem_image_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+            image_modifier_list.pNext = &ext_mem_image_info;
         } else {
             hlog("No suitable DRM modifier found!");
         }
@@ -820,7 +825,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     for (int i = 0; i < num_planes; i++) {
         VkImageSubresource sbr = {};
         if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
-            sbr.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+            sbr.aspectMask = VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT << i;
         } else {
             sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
