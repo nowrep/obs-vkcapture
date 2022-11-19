@@ -618,11 +618,11 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         VkDrmFormatModifierPropertiesListEXT modifier_props_list = {};
         modifier_props_list.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
 
-        VkFormatProperties2 format_props = {};
+        VkFormatProperties2KHR format_props = {};
         format_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
         format_props.pNext = &modifier_props_list;
 
-        ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
+        ifuncs->GetPhysicalDeviceFormatProperties2KHR(data->phy_device,
                 img_info.format, &format_props);
 
         modifier_props =
@@ -631,7 +631,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
         modifier_props_list.pDrmFormatModifierProperties = modifier_props;
 
-        ifuncs->GetPhysicalDeviceFormatProperties2(data->phy_device,
+        ifuncs->GetPhysicalDeviceFormatProperties2KHR(data->phy_device,
                 img_info.format, &format_props);
 
 #ifndef NDEBUG
@@ -660,11 +660,11 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             format_info.usage = img_info.usage;
             format_info.flags = img_info.flags;
 
-            VkImageFormatProperties2 format_props = {};
+            VkImageFormatProperties2KHR format_props = {};
             format_props.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
             format_props.pNext = NULL;
 
-            VkResult result = ifuncs->GetPhysicalDeviceImageFormatProperties2(data->phy_device,
+            VkResult result = ifuncs->GetPhysicalDeviceImageFormatProperties2KHR(data->phy_device,
                     &format_info, &format_props);
             if (result == VK_SUCCESS)
                 modifier_props[modifier_prop_count++] = modifier_props[i];
@@ -1211,7 +1211,7 @@ static inline bool is_inst_link_info(VkLayerInstanceCreateInfo *lici)
         lici->function == VK_LAYER_LINK_INFO;
 }
 
-static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
+static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *info,
         const VkAllocationCallbacks *ac,
         VkInstance *p_inst)
 {
@@ -1219,10 +1219,25 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     hlog("CreateInstance");
 #endif
 
+    const char *req_extensions[] = {
+        VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
+    };
+    static uint32_t req_extensions_count = 1;
+
+    int new_count = info->enabledExtensionCount + req_extensions_count;
+    const char **exts = (const char**)malloc(sizeof(char*) * new_count);
+    memcpy(exts, info->ppEnabledExtensionNames, sizeof(char*) * info->enabledExtensionCount);
+    for (uint32_t i = 0; i < req_extensions_count; ++i) {
+        exts[info->enabledExtensionCount + i] = req_extensions[i];
+    }
+    VkInstanceCreateInfo *i = (VkInstanceCreateInfo*)info;
+    i->enabledExtensionCount = new_count;
+    i->ppEnabledExtensionNames = exts;
+
     /* -------------------------------------------------------- */
     /* step through chain until we get to the link info         */
 
-    VkLayerInstanceCreateInfo *lici = (VkLayerInstanceCreateInfo *)cinfo->pNext;
+    VkLayerInstanceCreateInfo *lici = (VkLayerInstanceCreateInfo *)info->pNext;
     while (lici && !is_inst_link_info(lici)) {
         lici = (VkLayerInstanceCreateInfo *)lici->pNext;
     }
@@ -1251,14 +1266,14 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
 
     PFN_vkCreateInstance create = (PFN_vkCreateInstance)gpa(NULL, "vkCreateInstance");
 
-    VkResult res = create(cinfo, ac, p_inst);
+    VkResult res = create(info, ac, p_inst);
 #ifndef NDEBUG
     hlog("CreateInstance %s", result_to_str(res));
 #endif
     bool valid = res == VK_SUCCESS;
     if (!valid) {
         /* try again with original arguments */
-        res = create(cinfo, ac, p_inst);
+        res = create(info, ac, p_inst);
         if (res != VK_SUCCESS) {
             vk_free(ac, idata);
             return res;
@@ -1288,8 +1303,8 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
     GETADDR(DestroyInstance);
     GETADDR(GetPhysicalDeviceQueueFamilyProperties);
     GETADDR(GetPhysicalDeviceMemoryProperties);
-    GETADDR(GetPhysicalDeviceFormatProperties2);
-    GETADDR(GetPhysicalDeviceImageFormatProperties2);
+    GETADDR(GetPhysicalDeviceFormatProperties2KHR);
+    GETADDR(GetPhysicalDeviceImageFormatProperties2KHR);
     GETADDR(EnumerateDeviceExtensionProperties);
 #if HAVE_X11_XCB
     GETADDR(CreateXcbSurfaceKHR);
@@ -1345,12 +1360,18 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     struct vk_data *data = NULL;
 
     const char *req_extensions[] = {
-        VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,              // VK_VERSION_1_1
-        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,  // VK_VERSION_1_1
+        VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+        VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
         VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+        VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+        VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
+        VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
         VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
     };
-    static uint32_t req_extensions_count = 4;
+    static uint32_t req_extensions_count = 10;
 
     int new_count = info->enabledExtensionCount + req_extensions_count;
     const char **exts = (const char**)malloc(sizeof(char*) * new_count);

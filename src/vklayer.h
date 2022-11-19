@@ -88,8 +88,8 @@ struct vk_inst_funcs {
     DEF_FUNC(DestroyInstance);
     DEF_FUNC(GetPhysicalDeviceQueueFamilyProperties);
     DEF_FUNC(GetPhysicalDeviceMemoryProperties);
-    DEF_FUNC(GetPhysicalDeviceFormatProperties2);
-    DEF_FUNC(GetPhysicalDeviceImageFormatProperties2);
+    DEF_FUNC(GetPhysicalDeviceFormatProperties2KHR);
+    DEF_FUNC(GetPhysicalDeviceImageFormatProperties2KHR);
     DEF_FUNC(EnumerateDeviceExtensionProperties);
 #if HAVE_X11_XCB
     DEF_FUNC(CreateXcbSurfaceKHR);
