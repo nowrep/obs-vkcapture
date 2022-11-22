@@ -1067,7 +1067,7 @@ static void vk_shtex_capture(struct vk_data *data,
         blt.srcOffsets[0].z = 0;
         blt.srcOffsets[1].x = swap->image_extent.width;
         blt.srcOffsets[1].y = swap->image_extent.height;
-        blt.srcOffsets[1].z = 0;
+        blt.srcOffsets[1].z = 1;
         blt.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blt.dstSubresource.mipLevel = 0;
         blt.dstSubresource.baseArrayLayer = 0;
@@ -1077,7 +1077,7 @@ static void vk_shtex_capture(struct vk_data *data,
         blt.dstOffsets[0].z = 0;
         blt.dstOffsets[1].x = swap->image_extent.width;
         blt.dstOffsets[1].y = swap->image_extent.height;
-        blt.dstOffsets[1].z = 0;
+        blt.dstOffsets[1].z = 1;
         funcs->CmdBlitImage(cmd_buffer, cur_backbuffer,
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 swap->export_image,
