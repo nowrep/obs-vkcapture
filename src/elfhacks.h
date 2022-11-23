@@ -56,6 +56,13 @@ extern "C" {
 # define __elf32
 #endif
 
+#ifdef __powerpc64__
+# define __elf64
+#endif
+#ifdef __powerpc__
+# define __elf32
+#endif
+
 #ifdef __elf64
 # define ELFW_R_SYM ELF64_R_SYM
 # define ElfW_Sword Elf64_Sxword
