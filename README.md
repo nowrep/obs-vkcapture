@@ -26,6 +26,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 * libX11 (optional)
 * libxcb (optional)
 * libwayland-client (optional)
+* wayland-scanner (optional)
 
 ## Building
 
@@ -41,7 +42,6 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 
 ## Known Issues
 
-* Vulkan capture requires VK_EXT_external_memory_dma_buf
 * OpenGL GLX capture doesn't work with NVIDIA driver
 
 ## Troubleshooting
