@@ -41,10 +41,18 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 
 ## Known Issues
 
-* Vulkan capture requires VK_EXT_external_memory_dma_buf (NVIDIA driver >= 515.43.04)
+* Vulkan capture requires VK_EXT_external_memory_dma_buf
 * OpenGL GLX capture doesn't work with NVIDIA driver
 
 ## Troubleshooting
+
+**NVIDIA**
+
+Driver version >= 515.43.04 and `nvidia-drm.modeset=1` kernel parameter are required.
+
+**Multiple GPUs**
+
+Try to run both OBS and the game on the same GPU.
 
 **Cannot create EGLImage: Arguments are inconsistent**
 
