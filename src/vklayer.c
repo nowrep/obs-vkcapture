@@ -38,6 +38,19 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 /* #define DEBUG_EXTRA 1 */
 
+// Some simple repetition macro's here just to make defining the list of 
+// dst stage simpler
+#define REPEAT_4(X) X, X, X, X
+#define REPEAT_8(X) REPEAT_4(X), REPEAT_4(X)
+#define REPEAT_16(X) REPEAT_8(X), REPEAT_8(X)
+#define MAX_PRESENT_SWAP_SEMAPHORE_COUNT 16
+
+const VkPipelineStageFlagBits 
+present_submit_semaphore_dst_stage_masks[MAX_PRESENT_SWAP_SEMAPHORE_COUNT] = {
+    // we want to be ready to transfer after waiting
+    REPEAT_16(VK_PIPELINE_STAGE_TRANSFER_BIT)
+};
+
 static bool vulkan_seen = false;
 
 static bool vkcapture_linear = false;
@@ -1148,21 +1161,36 @@ static void vk_shtex_capture(struct vk_data *data,
     funcs->EndCommandBuffer(cmd_buffer);
 
     /* ------------------------------------------------------ */
+    
 
     VkSubmitInfo submit_info;
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.pNext = NULL;
-    submit_info.waitSemaphoreCount = info->waitSemaphoreCount;
-    submit_info.pWaitSemaphores = info->pWaitSemaphores;
+    submit_info.waitSemaphoreCount = 0;
+    submit_info.pWaitSemaphores = NULL;
     submit_info.pWaitDstStageMask = NULL;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmd_buffer;
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &frame_data->semaphore;
+    submit_info.signalSemaphoreCount = 0;
+    submit_info.pSignalSemaphores = NULL;
 
-    // update our passed in present info
-    info->waitSemaphoreCount = 1;
-    info->pWaitSemaphores = &frame_data->semaphore;
+    // To avoid making allocations for a list of dst stage masks for each wait
+    // semaphore we may have been given. We'll have a premade list of stage 
+    // masks.
+    //
+    // We don't want to end up in a situation where our list is exhausted
+    // so we check to see if we fall within the limits of worrying about
+    // this, otherwise we fall back on old behaviour
+    if (info->waitSemaphoreCount <= MAX_PRESENT_SWAP_SEMAPHORE_COUNT) {
+        submit_info.waitSemaphoreCount = info->waitSemaphoreCount;
+        submit_info.pWaitSemaphores = info->pWaitSemaphores;
+        submit_info.pWaitDstStageMask = present_submit_semaphore_dst_stage_masks;
+        submit_info.signalSemaphoreCount = 1;
+        submit_info.pSignalSemaphores = &frame_data->semaphore;
+
+        info->waitSemaphoreCount = 1;
+        info->pWaitSemaphores = &frame_data->semaphore;
+    }
 
     const VkFence fence = frame_data->fence;
     res = funcs->QueueSubmit(queue, 1, &submit_info, fence);
