@@ -89,6 +89,7 @@ struct vk_frame_data {
     VkCommandPool cmd_pool;
     VkCommandBuffer cmd_buffer;
     VkFence fence;
+    VkSemaphore semaphore;
     bool cmd_buffer_busy;
 };
 
@@ -919,6 +920,16 @@ static void vk_shtex_create_frame_objects(struct vk_data *data,
 #ifdef DEBUG_EXTRA
         hlog("CreateFence %s", result_to_str(res));
 #endif
+
+        VkSemaphoreCreateInfo sci = {};
+        sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        sci.pNext = NULL;
+        sci.flags = 0;
+        res = data->funcs.CreateSemaphore(device, &sci, data->ac, &frame_data->semaphore);
+
+#ifdef DEBUG_EXTRA
+        hlog("CreateSemaphore %s", result_to_str(res));
+#endif
     }
 }
 
@@ -946,8 +957,12 @@ static void vk_shtex_destroy_frame_objects(struct vk_data *data,
         struct vk_frame_data *frame_data =
             &queue_data->frames[frame_idx];
         bool *cmd_buffer_busy = &frame_data->cmd_buffer_busy;
+
+
         VkFence *fence = &frame_data->fence;
         vk_shtex_destroy_fence(data, cmd_buffer_busy, fence);
+
+        data->funcs.DestroySemaphore(device, frame_data->semaphore, data->ac);
 
         data->funcs.DestroyCommandPool(device, frame_data->cmd_pool,
                 data->ac);
@@ -962,7 +977,7 @@ static void vk_shtex_destroy_frame_objects(struct vk_data *data,
 static void vk_shtex_capture(struct vk_data *data,
         struct vk_device_funcs *funcs,
         struct vk_swap_data *swap, uint32_t idx,
-        VkQueue queue, const VkPresentInfoKHR *info)
+        VkQueue queue, VkPresentInfoKHR *info)
 {
     VkResult res = VK_SUCCESS;
 
@@ -1138,13 +1153,17 @@ static void vk_shtex_capture(struct vk_data *data,
     VkSubmitInfo submit_info;
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.pNext = NULL;
-    submit_info.waitSemaphoreCount = 0;
-    submit_info.pWaitSemaphores = NULL;
+    submit_info.waitSemaphoreCount = info->waitSemaphoreCount;
+    submit_info.pWaitSemaphores = info->pWaitSemaphores;
     submit_info.pWaitDstStageMask = NULL;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmd_buffer;
-    submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = NULL;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &frame_data->semaphore;
+
+    // update our passed in present info
+    info->waitSemaphoreCount = 1;
+    info->pWaitSemaphores = &frame_data->semaphore;
 
     const VkFence fence = frame_data->fence;
     res = funcs->QueueSubmit(queue, 1, &submit_info, fence);
@@ -1164,7 +1183,7 @@ static inline bool valid_rect(struct vk_swap_data *swap)
 }
 
 static void vk_capture(struct vk_data *data, VkQueue queue,
-        const VkPresentInfoKHR *info)
+        VkPresentInfoKHR *info)
 {
     // Use first swapchain ??
     struct vk_swap_data *swap = get_swap_data(data, info->pSwapchains[0]);
@@ -1196,14 +1215,16 @@ static void vk_capture(struct vk_data *data, VkQueue queue,
 static VkResult VKAPI_CALL OBS_QueuePresentKHR(VkQueue queue,
         const VkPresentInfoKHR *info)
 {
+    VkPresentInfoKHR api = *info;
+
     struct vk_data *const data = get_device_data_by_queue(queue);
     struct vk_device_funcs *const funcs = &data->funcs;
 
     if (data->valid) {
-        vk_capture(data, data->graphics_queue ? data->graphics_queue : queue, info);
+        vk_capture(data, data->graphics_queue ? data->graphics_queue : queue, &api);
     }
 
-    return funcs->QueuePresentKHR(queue, info);
+    return funcs->QueuePresentKHR(queue, &api);
 }
 
 /* ======================================================================== */
@@ -1488,6 +1509,8 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(ResetFences);
     GETADDR(GetImageSubresourceLayout);
     GETADDR(GetMemoryFdKHR);
+    GETADDR(CreateSemaphore);
+    GETADDR(DestroySemaphore);
 
     dfuncs->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)
         gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
