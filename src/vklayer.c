@@ -38,18 +38,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 /* #define DEBUG_EXTRA 1 */
 
-// Some simple repetition macro's here just to make defining the list of 
-// dst stage simpler
-#define REPEAT_4(X) X, X, X, X
-#define REPEAT_8(X) REPEAT_4(X), REPEAT_4(X)
-#define REPEAT_16(X) REPEAT_8(X), REPEAT_8(X)
 #define MAX_PRESENT_SWAP_SEMAPHORE_COUNT 16
-
-const VkPipelineStageFlagBits 
-present_submit_semaphore_dst_stage_masks[MAX_PRESENT_SWAP_SEMAPHORE_COUNT] = {
-    // we want to be ready to transfer after waiting
-    REPEAT_16(VK_PIPELINE_STAGE_TRANSFER_BIT)
-};
+static VkPipelineStageFlagBits* semaphore_dst_stage_masks; 
 
 static bool vulkan_seen = false;
 
@@ -147,6 +137,16 @@ struct vk_data {
 };
 
 /* ------------------------------------------------------------------------- */
+
+static void init_semaphore_dst_stage_masks() 
+{
+    semaphore_dst_stage_masks = malloc(sizeof(VkPipelineStageFlagBits) 
+        * MAX_PRESENT_SWAP_SEMAPHORE_COUNT);
+
+    for (int i = 0; i < MAX_PRESENT_SWAP_SEMAPHORE_COUNT; i++) {
+        *(semaphore_dst_stage_masks + i) = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+}
 
 static void *vk_alloc(const VkAllocationCallbacks *ac, size_t size,
         size_t alignment, enum VkSystemAllocationScope scope)
@@ -1184,7 +1184,7 @@ static void vk_shtex_capture(struct vk_data *data,
     if (info->waitSemaphoreCount <= MAX_PRESENT_SWAP_SEMAPHORE_COUNT) {
         submit_info.waitSemaphoreCount = info->waitSemaphoreCount;
         submit_info.pWaitSemaphores = info->pWaitSemaphores;
-        submit_info.pWaitDstStageMask = present_submit_semaphore_dst_stage_masks;
+        submit_info.pWaitDstStageMask = semaphore_dst_stage_masks;
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &frame_data->semaphore;
 
@@ -1917,6 +1917,8 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInt
 
     if (!vulkan_seen) {
         hlog("Init Vulkan %s", PLUGIN_VERSION);
+
+        init_semaphore_dst_stage_masks();
         init_obj_list(&instances);
         init_obj_list(&devices);
         capture_init();
