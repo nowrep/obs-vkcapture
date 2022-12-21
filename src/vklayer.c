@@ -958,7 +958,6 @@ static void vk_shtex_destroy_frame_objects(struct vk_data *data,
             &queue_data->frames[frame_idx];
         bool *cmd_buffer_busy = &frame_data->cmd_buffer_busy;
 
-
         VkFence *fence = &frame_data->fence;
         vk_shtex_destroy_fence(data, cmd_buffer_busy, fence);
 
