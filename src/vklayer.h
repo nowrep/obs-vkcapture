@@ -131,6 +131,8 @@ struct vk_device_funcs {
     DEF_FUNC(GetImageSubresourceLayout);
     DEF_FUNC(GetMemoryFdKHR);
     DEF_FUNC(GetImageDrmFormatModifierPropertiesEXT);
+    DEF_FUNC(CreateSemaphore);
+    DEF_FUNC(DestroySemaphore);
 };
 
 #undef DEF_FUNC
