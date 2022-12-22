@@ -83,6 +83,7 @@ struct vk_queue_data {
 
     uint32_t fam_idx;
     bool supports_transfer;
+    bool supports_graphics;
     struct vk_frame_data *frames;
     uint32_t frame_index;
     uint32_t frame_count;
@@ -126,7 +127,7 @@ struct vk_data {
     struct vk_swap_data *cur_swap;
 
     struct vk_obj_list queues;
-    VkQueue graphics_queue;
+    VkQueue queue;
 
     VkExternalMemoryProperties external_mem_props;
 
@@ -293,11 +294,10 @@ static struct vk_queue_data *add_queue_data(struct vk_data *data, VkQueue queue,
     add_obj_data(&data->queues, (uintptr_t)queue, queue_data);
     queue_data->fam_idx = fam_idx;
     queue_data->supports_transfer = supports_transfer;
+    queue_data->supports_graphics = supports_graphics;
     queue_data->frames = NULL;
     queue_data->frame_index = 0;
     queue_data->frame_count = 0;
-    if (supports_graphics)
-        data->graphics_queue = queue;
     return queue_data;
 }
 
@@ -586,14 +586,38 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     struct vk_inst_funcs *ifuncs =
         get_inst_funcs_by_physical_device(data->phy_device);
 
+    bool need_graphics = false;
+
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
     if (!vk_format_requires_conversion(swap->format)) {
         swap->export_format = swap->format;
     } else {
+        need_graphics = true;
         swap->export_format = VK_FORMAT_B8G8R8A8_UNORM;
         hlog("Converting to %s", vk_format_to_str(swap->export_format));
     }
+
+    data->queue = VK_NULL_HANDLE;
+    struct vk_queue_data *queue_data = queue_walk_begin(data);
+    while (queue_data) {
+        if (need_graphics) {
+            if (queue_data->supports_graphics) {
+                data->queue = (VkQueue)queue_data->node.obj;
+                break;
+            }
+        } else {
+            if (!queue_data->supports_graphics && queue_data->supports_transfer) {
+                data->queue = (VkQueue)queue_data->node.obj;
+                break;
+            }
+            if (!data->queue && queue_data->supports_transfer) {
+                data->queue = (VkQueue)queue_data->node.obj;
+            }
+        }
+        queue_data = queue_walk_next(queue_data);
+    }
+    queue_walk_end(data);
 
     // create image (for dedicated allocation)
     VkImageCreateInfo img_info = {};
@@ -1229,7 +1253,7 @@ static VkResult VKAPI_CALL OBS_QueuePresentKHR(VkQueue queue,
     struct vk_device_funcs *const funcs = &data->funcs;
 
     if (data->valid) {
-        vk_capture(data, data->graphics_queue ? data->graphics_queue : queue, &api);
+        vk_capture(data, data->queue ? data->queue : queue, &api);
     }
 
     return funcs->QueuePresentKHR(queue, &api);
@@ -1450,7 +1474,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
     init_obj_list(&data->queues);
-    data->graphics_queue = VK_NULL_HANDLE;
+    data->queue = VK_NULL_HANDLE;
 
     /* -------------------------------------------------------- */
     /* create device and initialize hook data                   */
@@ -1611,13 +1635,10 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
                     queue_index, &queue);
             const bool supports_transfer =
                 (queue_family_properties[family_index]
-                 .queueFlags &
-                 (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |
-                  VK_QUEUE_TRANSFER_BIT)) != 0;
+                 .queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
             const bool supports_graphics =
                 (queue_family_properties[family_index]
-                 .queueFlags &
-                 (VK_QUEUE_GRAPHICS_BIT)) != 0;
+                 .queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
             add_queue_data(data, queue, family_index,
                     supports_transfer, supports_graphics, ac);
         }
