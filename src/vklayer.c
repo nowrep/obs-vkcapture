@@ -1450,6 +1450,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
     init_obj_list(&data->queues);
+    data->graphics_queue = VK_NULL_HANDLE;
 
     /* -------------------------------------------------------- */
     /* create device and initialize hook data                   */
