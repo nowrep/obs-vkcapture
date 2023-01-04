@@ -759,9 +759,9 @@ bool obs_module_load(void)
 void obs_module_unload()
 {
     uint64_t q = 1;
-    write(server.quitfd, &q, sizeof(q));
-
-    pthread_join(server.thread, NULL);
+    if (write(server.quitfd, &q, sizeof(q)) == sizeof(q)) {
+        pthread_join(server.thread, NULL);
+    }
 
     blog(LOG_INFO, "plugin unloaded");
 }
