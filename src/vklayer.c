@@ -698,13 +698,14 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
                     &format_info, &format_props);
             bool allow_import = external_format_props.externalMemoryProperties.externalMemoryFeatures
                 & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
+            hlog("features %d types %d handletypes %d\n", (int)external_format_props.externalMemoryProperties.externalMemoryFeatures,
+                   (int)external_format_props.externalMemoryProperties.exportFromImportedHandleTypes,
+                   (int)external_format_props.externalMemoryProperties.compatibleHandleTypes);
             if (result == VK_SUCCESS && allow_import) {
                 modifier_props[modifier_prop_count++] = modifier_props[i];
-#ifndef NDEBUG
                 hlog(" %d: modifier:%"PRIu64" planes:%d", i,
                         modifier_props[i].drmFormatModifier,
                         modifier_props[i].drmFormatModifierPlaneCount);
-#endif
             }
         }
 
