@@ -665,11 +665,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         hlog("Available modifiers:");
 #endif
         for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
-#ifndef NDEBUG
-            hlog(" %d: modifier:%"PRIu64" planes:%d", i,
-                    modifier_props[i].drmFormatModifier,
-                    modifier_props[i].drmFormatModifierPlaneCount);
-#endif
             if (vkcapture_linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
                 continue;
             }
@@ -678,23 +673,39 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             mod_info.drmFormatModifier = modifier_props[i].drmFormatModifier;
             mod_info.sharingMode = img_info.sharingMode;
 
+            VkPhysicalDeviceExternalImageFormatInfo external_format_info = {};
+            external_format_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+            external_format_info.pNext = &mod_info;
+            external_format_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
             VkPhysicalDeviceImageFormatInfo2 format_info = {};
             format_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
-            format_info.pNext = &mod_info;
+            format_info.pNext = &external_format_info;
             format_info.format = img_info.format;
             format_info.type = VK_IMAGE_TYPE_2D;
             format_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
             format_info.usage = img_info.usage;
             format_info.flags = img_info.flags;
 
+            VkExternalImageFormatProperties external_format_props = {};
+            external_format_props.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+
             VkImageFormatProperties2KHR format_props = {};
             format_props.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
-            format_props.pNext = NULL;
+            format_props.pNext = &external_format_props;
 
             VkResult result = ifuncs->GetPhysicalDeviceImageFormatProperties2KHR(data->phy_device,
                     &format_info, &format_props);
-            if (result == VK_SUCCESS)
+            bool allow_import = external_format_props.externalMemoryProperties.externalMemoryFeatures
+                & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
+            if (result == VK_SUCCESS && allow_import) {
                 modifier_props[modifier_prop_count++] = modifier_props[i];
+#ifndef NDEBUG
+                hlog(" %d: modifier:%"PRIu64" planes:%d", i,
+                        modifier_props[i].drmFormatModifier,
+                        modifier_props[i].drmFormatModifierPlaneCount);
+#endif
+            }
         }
 
         if (modifier_prop_count > 0) {
