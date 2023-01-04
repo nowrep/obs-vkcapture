@@ -1,0 +1,31 @@
+name: Main
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Dependencies
+      run: |
+        sudo apt update
+        sudo apt install libvulkan-dev libobs-dev libgl-dev libx11-dev libxcb1-dev libxcb-xfixes0-dev libwayland-dev libwayland-bin
+
+    - name: Configure
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Install
+      run: sudo cmake --install ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
