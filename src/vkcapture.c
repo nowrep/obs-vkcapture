@@ -52,6 +52,7 @@ typedef struct {
     int activated;
     int buf_id;
     int buf_fds[4];
+    bool no_modifiers;
     struct capture_client_data cdata;
     struct capture_texture_data tdata;
 } vkcapture_client_t;
@@ -299,16 +300,18 @@ static vkcapture_client_t *find_client_by_id(int id)
     return client;
 }
 
-static void activate_client(vkcapture_client_t *client, bool activate)
+static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client, bool activate)
 {
-    char msg;
+    struct capture_control_data msg;
+    memset(&msg, 0, sizeof(msg));
     if (activate && !client->activated++) {
-        msg = '1';
+        msg.capturing = 1;
     } else if (!activate && !--client->activated) {
-        msg = '0';
+        msg.capturing = 0;
     } else {
         return;
     }
+    msg.no_modifiers = client->no_modifiers;
     client->buf_id = 0;
     for (int i = 0; i < 4; ++i) {
         if (client->buf_fds[i] >= 0) {
@@ -317,8 +320,8 @@ static void activate_client(vkcapture_client_t *client, bool activate)
         }
     }
     memset(&client->tdata, 0, sizeof(client->tdata));
-    ssize_t ret = write(client->sockfd, &msg, 1);
-    if (ret != 1) {
+    ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
+    if (ret != sizeof(msg)) {
         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
     }
 }
@@ -331,7 +334,7 @@ static void vkcapture_source_show(void *data)
         pthread_mutex_lock(&server.mutex);
         vkcapture_client_t *client = find_client_by_id(ctx->client_id);
         if (client) {
-            activate_client(client, true);
+            activate_client(ctx, client, true);
         }
         pthread_mutex_unlock(&server.mutex);
     }
@@ -345,7 +348,7 @@ static void vkcapture_source_hide(void *data)
         pthread_mutex_lock(&server.mutex);
         vkcapture_client_t *client = find_client_by_id(ctx->client_id);
         if (client) {
-            activate_client(client, false);
+            activate_client(ctx, client, false);
             destroy_texture(ctx);
         }
         pthread_mutex_unlock(&server.mutex);
@@ -391,18 +394,31 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             obs_leave_graphics();
 
             if (!ctx->texture) {
-                blog(LOG_ERROR, "Could not create texture from dmabuf source");
+                if (!client->no_modifiers) {
+                    blog(LOG_WARNING, "Asking client to create texture without modifiers");
+                    client->no_modifiers = true;
+                    struct capture_control_data msg;
+                    memset(&msg, 0, sizeof(msg));
+                    msg.capturing = client->activated ? 1 : 0;
+                    msg.no_modifiers = client->no_modifiers;
+                    ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
+                    if (ret != sizeof(msg)) {
+                        blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
+                    }
+                } else {
+                    blog(LOG_ERROR, "Could not create texture from dmabuf source");
+                }
             }
             ctx->buf_id = client->buf_id;
         } else if (client != find_matching_client(ctx)) {
-            activate_client(client, false);
+            activate_client(ctx, client, false);
             ctx->client_id = 0;
             destroy_texture(ctx);
         }
     } else {
         vkcapture_client_t *client = find_matching_client(ctx);
         if (client) {
-            activate_client(client, true);
+            activate_client(ctx, client, true);
             ctx->client_id = client->id;
         }
     }

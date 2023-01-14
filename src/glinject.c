@@ -399,7 +399,7 @@ static void gl_capture(void *display, void *surface)
         gl_free();
     }
 
-    if (capture_should_init()) {
+    if (capture_should_init(NULL)) {
         if (!gl_init(display, surface)) {
             gl_free();
             data.valid = false;

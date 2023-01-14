@@ -580,7 +580,7 @@ static bool vk_format_is_bgra(VkFormat format)
 }
 
 static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
-        struct vk_swap_data *swap)
+        struct vk_swap_data *swap, bool no_modifiers)
 {
     struct vk_device_funcs *funcs = &data->funcs;
     struct vk_inst_funcs *ifuncs =
@@ -635,13 +635,13 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     img_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     img_info.tiling = VK_IMAGE_TILING_LINEAR;
 
-    int num_planes = 1; // format itself may be multi-planar?
+    int num_planes = 1;
     uint64_t *image_modifiers = NULL;
     VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list = {};
     struct VkDrmFormatModifierPropertiesEXT *modifier_props = NULL;
     uint32_t modifier_prop_count = 0;
 
-    if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
+    if (!no_modifiers && funcs->GetImageDrmFormatModifierPropertiesEXT) {
         VkDrmFormatModifierPropertiesListEXT modifier_props_list = {};
         modifier_props_list.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
 
@@ -828,7 +828,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         return false;
     }
 
-    if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
+    if (!no_modifiers && funcs->GetImageDrmFormatModifierPropertiesEXT) {
         VkImageDrmFormatModifierPropertiesEXT image_mod_props = {};
         image_mod_props.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT;
         res = funcs->GetImageDrmFormatModifierPropertiesEXT(device, swap->export_image, &image_mod_props);
@@ -851,7 +851,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     for (int i = 0; i < num_planes; i++) {
         VkImageSubresource sbr = {};
-        if (funcs->GetImageDrmFormatModifierPropertiesEXT) {
+        if (!no_modifiers && funcs->GetImageDrmFormatModifierPropertiesEXT) {
             sbr.aspectMask = VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT << i;
         } else {
             sbr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -877,9 +877,9 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     return true;
 }
 
-static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
+static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap, bool no_modifiers)
 {
-    if (!vk_shtex_init_vulkan_tex(data, swap)) {
+    if (!vk_shtex_init_vulkan_tex(data, swap, no_modifiers)) {
         return false;
     }
 
@@ -1226,8 +1226,9 @@ static void vk_capture(struct vk_data *data, VkQueue queue,
         vk_shtex_free(data);
     }
 
-    if (capture_should_init()) {
-        if (valid_rect(swap) && !vk_shtex_init(data, swap)) {
+    bool no_modifiers = false;
+    if (capture_should_init(&no_modifiers)) {
+        if (valid_rect(swap) && !vk_shtex_init(data, swap, no_modifiers)) {
             vk_shtex_free(data);
             data->valid = false;
             hlog("vk_shtex_init failed");
