@@ -52,7 +52,7 @@ typedef struct {
     int activated;
     int buf_id;
     int buf_fds[4];
-    bool no_modifiers;
+    int import_failures;
     struct capture_client_data cdata;
     struct capture_texture_data tdata;
 } vkcapture_client_t;
@@ -311,7 +311,8 @@ static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client,
     } else {
         return;
     }
-    msg.no_modifiers = client->no_modifiers;
+    msg.no_modifiers = client->import_failures == 1 ? 1 : 0;
+    msg.linear = client->import_failures == 2 ? 1 : 0;
     client->buf_id = 0;
     for (int i = 0; i < 4; ++i) {
         if (client->buf_fds[i] >= 0) {
@@ -394,13 +395,15 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             obs_leave_graphics();
 
             if (!ctx->texture) {
-                if (!client->no_modifiers) {
-                    blog(LOG_WARNING, "Asking client to create texture without modifiers");
-                    client->no_modifiers = true;
+                if (client->import_failures < 2) {
+                    blog(LOG_WARNING, "Asking client to create texture %s",
+                        client->import_failures == 0 ? "without modifiers" : "linear");
+                    client->import_failures++;
                     struct capture_control_data msg;
                     memset(&msg, 0, sizeof(msg));
                     msg.capturing = client->activated ? 1 : 0;
-                    msg.no_modifiers = client->no_modifiers;
+                    msg.no_modifiers = client->import_failures == 1 ? 1 : 0;
+                    msg.linear = client->import_failures == 2 ? 1 : 0;
                     ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
                     if (ret != sizeof(msg)) {
                         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));

@@ -34,6 +34,7 @@ static struct {
     bool accepted;
     bool capturing;
     bool no_modifiers;
+    bool linear;
     bool need_reinit;
 } data;
 
@@ -129,9 +130,12 @@ void capture_update_socket()
     ssize_t n = recv(data.connfd, &control, sizeof(control), 0);
     if (n == sizeof(control)) {
         const bool old_no_modifiers = data.no_modifiers;
+        const bool old_linear = data.linear;
         data.accepted = control.capturing == 1;
         data.no_modifiers = control.no_modifiers == 1;
-        if (data.capturing && old_no_modifiers != data.no_modifiers) {
+        data.linear = control.linear == 1;
+        if (data.capturing && (old_no_modifiers != data.no_modifiers
+            || old_linear != data.linear)) {
             data.need_reinit = true;
         }
     }
@@ -204,16 +208,22 @@ bool capture_should_stop()
     return data.capturing && (data.connfd < 0 || !data.accepted || data.need_reinit);
 }
 
-bool capture_should_init(bool *no_modifiers)
+bool capture_should_init()
 {
-    const bool out = !data.capturing && data.connfd >= 0 && data.accepted;
-    if (no_modifiers) {
-        *no_modifiers = data.no_modifiers;
-    }
-    return out;
+    return !data.capturing && data.connfd >= 0 && data.accepted;
 }
 
 bool capture_ready()
 {
     return data.capturing;
+}
+
+bool capture_allocate_no_modifiers()
+{
+    return data.no_modifiers;
+}
+
+bool capture_allocate_linear()
+{
+    return data.linear;
 }

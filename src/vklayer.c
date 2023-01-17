@@ -580,11 +580,14 @@ static bool vk_format_is_bgra(VkFormat format)
 }
 
 static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
-        struct vk_swap_data *swap, bool no_modifiers)
+        struct vk_swap_data *swap)
 {
     struct vk_device_funcs *funcs = &data->funcs;
     struct vk_inst_funcs *ifuncs =
         get_inst_funcs_by_physical_device(data->phy_device);
+
+    const bool no_modifiers = capture_allocate_no_modifiers();
+    const bool linear = vkcapture_linear || capture_allocate_linear();
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
@@ -641,12 +644,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         hlog("Available modifiers:");
 #endif
         for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
-#ifndef NDEBUG
-            hlog(" %d: modifier:%"PRIu64" planes:%d", i,
-                    modifier_props[i].drmFormatModifier,
-                    modifier_props[i].drmFormatModifierPlaneCount);
-#endif
-            if (vkcapture_linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
+            if (linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
                 continue;
             }
             VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {};
@@ -669,8 +667,14 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
             VkResult result = ifuncs->GetPhysicalDeviceImageFormatProperties2KHR(data->phy_device,
                     &format_info, &format_props);
-            if (result == VK_SUCCESS)
+            if (result == VK_SUCCESS) {
+#ifndef NDEBUG
+                hlog(" %d: modifier:%"PRIu64" planes:%d", i,
+                        modifier_props[i].drmFormatModifier,
+                        modifier_props[i].drmFormatModifierPlaneCount);
+#endif
                 modifier_props[modifier_prop_count++] = modifier_props[i];
+            }
         }
 
         if (modifier_prop_count > 0) {
@@ -853,9 +857,9 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     return true;
 }
 
-static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap, bool no_modifiers)
+static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 {
-    if (!vk_shtex_init_vulkan_tex(data, swap, no_modifiers)) {
+    if (!vk_shtex_init_vulkan_tex(data, swap)) {
         return false;
     }
 
@@ -1202,9 +1206,8 @@ static void vk_capture(struct vk_data *data, VkQueue queue,
         vk_shtex_free(data);
     }
 
-    bool no_modifiers = false;
-    if (capture_should_init(&no_modifiers)) {
-        if (valid_rect(swap) && !vk_shtex_init(data, swap, no_modifiers)) {
+    if (capture_should_init()) {
+        if (valid_rect(swap) && !vk_shtex_init(data, swap)) {
             vk_shtex_free(data);
             data->valid = false;
             hlog("vk_shtex_init failed");
