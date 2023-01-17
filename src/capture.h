@@ -62,6 +62,16 @@ struct capture_texture_data {
 #define CAPTURE_TEXTURE_DATA_SIZE 128
 static_assert(sizeof(struct capture_texture_data) == CAPTURE_TEXTURE_DATA_SIZE, "size mismatch");
 
+struct capture_control_data {
+    uint8_t capturing;
+    uint8_t no_modifiers;
+    uint8_t padding[30];
+} __attribute__((packed));
+
+#define CAPTURE_CONTROL_DATA_TYPE 10
+#define CAPTURE_CONTROL_DATA_SIZE 32
+static_assert(sizeof(struct capture_control_data) == CAPTURE_CONTROL_DATA_SIZE, "size mismatch");
+
 void capture_init();
 void capture_update_socket();
 void capture_init_shtex(
@@ -71,5 +81,5 @@ void capture_init_shtex(
 void capture_stop();
 
 bool capture_should_stop();
-bool capture_should_init();
+bool capture_should_init(bool *no_modifiers);
 bool capture_ready();

@@ -33,6 +33,8 @@ static struct {
     int connfd;
     bool accepted;
     bool capturing;
+    bool no_modifiers;
+    bool need_reinit;
 } data;
 
 static bool get_wine_exe(char *buf, size_t bufsize)
@@ -106,9 +108,8 @@ static bool capture_try_connect()
 
 void capture_init()
 {
+    memset(&data, 0, sizeof(data));
     data.connfd = -1;
-    data.accepted = false;
-    data.capturing = false;
 }
 
 void capture_update_socket()
@@ -124,10 +125,15 @@ void capture_update_socket()
         return;
     }
 
-    char buf[1];
-    ssize_t n = recv(data.connfd, buf, 1, 0);
-    if (n == 1) {
-        data.accepted = buf[0] == '1';
+    struct capture_control_data control;
+    ssize_t n = recv(data.connfd, &control, sizeof(control), 0);
+    if (n == sizeof(control)) {
+        const bool old_no_modifiers = data.no_modifiers;
+        data.accepted = control.capturing == 1;
+        data.no_modifiers = control.no_modifiers == 1;
+        if (data.capturing && old_no_modifiers != data.no_modifiers) {
+            data.need_reinit = true;
+        }
     }
     if (n == -1) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -185,6 +191,7 @@ void capture_init_shtex(
     }
 
     data.capturing = true;
+    data.need_reinit = false;
 }
 
 void capture_stop()
@@ -194,12 +201,16 @@ void capture_stop()
 
 bool capture_should_stop()
 {
-    return data.capturing && (data.connfd < 0 || !data.accepted);
+    return data.capturing && (data.connfd < 0 || !data.accepted || data.need_reinit);
 }
 
-bool capture_should_init()
+bool capture_should_init(bool *no_modifiers)
 {
-    return !data.capturing && data.connfd >= 0 && data.accepted;
+    const bool out = !data.capturing && data.connfd >= 0 && data.accepted;
+    if (no_modifiers) {
+        *no_modifiers = data.no_modifiers;
+    }
+    return out;
 }
 
 bool capture_ready()
