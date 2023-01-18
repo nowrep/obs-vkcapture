@@ -2,8 +2,6 @@
 
 OBS plugin for Vulkan/OpenGL game capture on Linux.
 
-Requires OBS >= 27.
-
 AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
 **Flatpak:**
@@ -52,10 +50,6 @@ Driver version >= 515.43.04 and `nvidia-drm.modeset=1` kernel parameter are requ
 **Multiple GPUs**
 
 Try to run both OBS and the game on the same GPU.
-
-**Cannot create EGLImage: Arguments are inconsistent**
-
-If you get this error with Vulkan capture, try starting the game with `OBS_VKCAPTURE_LINEAR=1` environment variable.
 
 **No Game Capture source available in OBS 27**
 
