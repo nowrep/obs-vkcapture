@@ -76,6 +76,8 @@ typedef struct {
 #endif
     bool show_cursor;
     bool allow_transparency;
+    bool window_match;
+    bool window_exclude;
     const char *window;
 
     int buf_id;
@@ -249,7 +251,15 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
     ctx->show_cursor = obs_data_get_bool(settings, "show_cursor");
     ctx->allow_transparency = obs_data_get_bool(settings, "allow_transparency");
 
+    ctx->window_match = false;
+    ctx->window_exclude = false;
     ctx->window = obs_data_get_string(settings, "window");
+    if (!strncmp(ctx->window, "exclude=", 8)) {
+        ctx->window_exclude = true;
+        ctx->window = ctx->window + 8;
+    } else {
+        ctx->window_match = true;
+    }
     if (!strlen(ctx->window)) {
         ctx->window = NULL;
     }
@@ -276,7 +286,8 @@ static vkcapture_client_t *find_matching_client(vkcapture_source_t *ctx)
     if (ctx->window) {
         for (size_t i = 0; i < server.clients.num; i++) {
             vkcapture_client_t *c = server.clients.array + i;
-            if (!strcmp(c->cdata.exe, ctx->window)) {
+            bool match = !strcmp(c->cdata.exe, ctx->window);
+            if ((ctx->window_match && match) || (ctx->window_exclude && !match)) {
                 client = c;
                 break;
             }
@@ -510,6 +521,16 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
     pthread_mutex_unlock(&server.mutex);
     if (ctx->window && !window_found) {
         obs_property_list_add_string(p, ctx->window, ctx->window);
+    }
+
+    size_t count = obs_property_list_item_count(p);
+    for (size_t i = 1; i < count; ++i) {
+        char name[128];
+        char value[128];
+        const char *item = obs_property_list_item_string(p, i);
+        snprintf(name, sizeof(name), "%s %s", obs_module_text("CaptureAnyWindowExcept"), item);
+        snprintf(value, sizeof(value), "exclude=%s", obs_property_list_item_string(p, i));
+        obs_property_list_add_string(p, name, value);
     }
 
     if (cursor_enabled(ctx)) {
