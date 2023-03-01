@@ -1885,7 +1885,7 @@ static PFN_vkVoidFunction VKAPI_CALL OBS_GetInstanceProcAddr(VkInstance instance
 
 #undef GETPROCADDR
 
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInterface *nli)
+VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInterface *nli)
 {
     if (nli->loaderLayerInterfaceVersion >= 2) {
         nli->sType = LAYER_NEGOTIATE_INTERFACE_STRUCT;
