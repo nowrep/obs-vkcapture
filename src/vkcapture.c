@@ -434,7 +434,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 } else {
                     obs_enter_graphics();
                     ctx->texture = gs_texture_create(ctx->tdata.width, ctx->tdata.height,
-                        GS_BGRA, 1, NULL, GS_DYNAMIC);
+                        ctx->tdata.format == DRM_FORMAT_ARGB8888 ? GS_BGRA : GS_RGBA, 1, NULL, GS_DYNAMIC);
                     obs_leave_graphics();
                 }
             } else {
