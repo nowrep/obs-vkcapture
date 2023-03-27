@@ -30,6 +30,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <sys/eventfd.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/dma-buf.h>
 
 #include "utils.h"
 #include "capture.h"
@@ -46,6 +49,14 @@ static struct wl_display *wl_display = NULL;
 static wl_cursor_t *wlcursor = NULL;
 #endif
 
+enum vkcapture_import_attempt {
+    IMPORT_DEFAULT = 0,
+    IMPORT_NO_MODIFIERS = 1,
+    IMPORT_LINEAR = 2,
+    IMPORT_LINEAR_HOST_MAPPED = 3,
+    IMPORT_FAILURES_MAX = IMPORT_LINEAR_HOST_MAPPED,
+};
+
 typedef struct {
     int id;
     int sockfd;
@@ -53,6 +64,8 @@ typedef struct {
     int buf_id;
     int buf_fds[4];
     int import_failures;
+    size_t map_size;
+    void *map_memory;
     struct capture_client_data cdata;
     struct capture_texture_data tdata;
 } vkcapture_client_t;
@@ -85,6 +98,17 @@ typedef struct {
     struct capture_texture_data tdata;
 
 } vkcapture_source_t;
+
+static const char *import_attempt_str(enum vkcapture_import_attempt attempt)
+{
+    switch (attempt) {
+    case IMPORT_DEFAULT: return "default";
+    case IMPORT_NO_MODIFIERS: return "no modifiers";
+    case IMPORT_LINEAR: return "linear";
+    case IMPORT_LINEAR_HOST_MAPPED: return "linear host mapped";
+    default: return "invalid";
+    }
+}
 
 static void cursor_create(vkcapture_source_t *ctx)
 {
@@ -322,8 +346,9 @@ static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client,
     } else {
         return;
     }
-    msg.no_modifiers = client->import_failures == 1 ? 1 : 0;
-    msg.linear = client->import_failures == 2 ? 1 : 0;
+    msg.no_modifiers = !!(client->import_failures == IMPORT_NO_MODIFIERS);
+    msg.linear = !!(client->import_failures == IMPORT_LINEAR || client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+    msg.map_host = !!(client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
     client->buf_id = 0;
     for (int i = 0; i < 4; ++i) {
         if (client->buf_fds[i] >= 0) {
@@ -399,22 +424,38 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 blog(LOG_INFO, " [%d] fd:%d stride:%d offset:%d", i, client->buf_fds[i], strides[i], offsets[i]);
             }
 
-            obs_enter_graphics();
-            ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
-                    ctx->tdata.format, GS_BGRX, ctx->tdata.nfd, client->buf_fds, strides, offsets,
-                    ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
-            obs_leave_graphics();
+            if (client->import_failures == IMPORT_LINEAR_HOST_MAPPED) {
+                lseek(client->buf_fds[0], 0, SEEK_SET);
+                client->map_size = lseek(client->buf_fds[0], 0, SEEK_END);
+                client->map_memory = mmap(NULL, client->map_size, PROT_READ, MAP_SHARED, client->buf_fds[0], 0);
+                if (client->map_memory == MAP_FAILED) {
+                    client->map_memory = NULL;
+                    blog(LOG_ERROR, "Failed to map dmabuf '%s'", strerror(errno));
+                } else {
+                    obs_enter_graphics();
+                    ctx->texture = gs_texture_create(ctx->tdata.width, ctx->tdata.height,
+                        GS_BGRA, 1, NULL, GS_DYNAMIC);
+                    obs_leave_graphics();
+                }
+            } else {
+                obs_enter_graphics();
+                ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
+                        ctx->tdata.format, GS_BGRX, ctx->tdata.nfd, client->buf_fds, strides, offsets,
+                        ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
+                obs_leave_graphics();
+            }
 
             if (!ctx->texture) {
-                if (client->import_failures < 2) {
-                    blog(LOG_WARNING, "Asking client to create texture %s",
-                        client->import_failures == 0 ? "without modifiers" : "linear");
+                if (client->import_failures < IMPORT_FAILURES_MAX) {
                     client->import_failures++;
+                    blog(LOG_WARNING, "Asking client to create texture %s",
+                        import_attempt_str(client->import_failures));
                     struct capture_control_data msg;
                     memset(&msg, 0, sizeof(msg));
                     msg.capturing = client->activated ? 1 : 0;
-                    msg.no_modifiers = client->import_failures == 1 ? 1 : 0;
-                    msg.linear = client->import_failures == 2 ? 1 : 0;
+                    msg.no_modifiers = !!(client->import_failures == IMPORT_NO_MODIFIERS);
+                    msg.linear = !!(client->import_failures == IMPORT_LINEAR || client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+                    msg.map_host = !!(client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
                     ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
                     if (ret != sizeof(msg)) {
                         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
@@ -452,6 +493,26 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     if (ctx->show_cursor) {
         cursor_update(ctx);
+    }
+
+    pthread_mutex_lock(&server.mutex);
+    vkcapture_client_t *client = find_client_by_id(ctx->client_id);
+    void *memory = client->map_memory;
+    int stride = client->tdata.strides[0];
+    int fd = client->buf_fds[0];
+    pthread_mutex_unlock(&server.mutex);
+
+    if (memory) {
+        struct dma_buf_sync sync;
+        sync.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ;
+        ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+
+        obs_enter_graphics();
+        gs_texture_set_image(ctx->texture, memory, stride, false);
+        obs_leave_graphics();
+
+        sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ;
+        ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
     }
 
     effect = obs_get_base_effect(ctx->allow_transparency ? OBS_EFFECT_DEFAULT : OBS_EFFECT_OPAQUE);
@@ -597,6 +658,10 @@ static void server_cleanup_client(vkcapture_client_t *client)
 
     close(client->sockfd);
     server_remove_fd(client->sockfd);
+
+    if (client->map_memory) {
+        munmap(client->map_memory, client->map_size);
+    }
 
     for (int i = 0; i < 4; ++i) {
         if (client->buf_fds[i] >= 0) {

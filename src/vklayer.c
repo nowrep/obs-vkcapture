@@ -588,6 +588,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     const bool no_modifiers = capture_allocate_no_modifiers();
     const bool linear = vkcapture_linear || capture_allocate_linear();
+    const bool map_host = capture_allocate_map_host();
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
@@ -747,6 +748,9 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     bool allocated = false;
     uint32_t mem_req_bits = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    if (map_host) {
+        mem_req_bits = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    }
     for (uint32_t i = 0; i < pdmp.memoryTypeCount; ++i) {
         if ((memr.memoryRequirements.memoryTypeBits & (1 << i)) &&
                 (pdmp.memoryTypes[i].propertyFlags &
@@ -759,7 +763,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             hlog("AllocateMemory failed (DEVICE_LOCAL): %s", result_to_str(res));
         }
     }
-    if (!allocated) {
+    if (!allocated && !map_host) {
         /* Try again without DEVICE_LOCAL */
         for (uint32_t i = 0; i < pdmp.memoryTypeCount; ++i) {
             if ((memr.memoryRequirements.memoryTypeBits & (1 << i)) &&

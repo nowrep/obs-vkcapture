@@ -66,7 +66,8 @@ struct capture_control_data {
     uint8_t capturing;
     uint8_t no_modifiers;
     uint8_t linear;
-    uint8_t padding[29];
+    uint8_t map_host;
+    uint8_t padding[28];
 } __attribute__((packed));
 
 #define CAPTURE_CONTROL_DATA_TYPE 10
@@ -87,3 +88,4 @@ bool capture_ready();
 
 bool capture_allocate_no_modifiers();
 bool capture_allocate_linear();
+bool capture_allocate_map_host();

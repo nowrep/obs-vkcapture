@@ -35,6 +35,7 @@ static struct {
     bool capturing;
     bool no_modifiers;
     bool linear;
+    bool map_host;
     bool need_reinit;
 } data;
 
@@ -131,11 +132,14 @@ void capture_update_socket()
     if (n == sizeof(control)) {
         const bool old_no_modifiers = data.no_modifiers;
         const bool old_linear = data.linear;
+        const bool old_map_host = data.map_host;
         data.accepted = control.capturing == 1;
         data.no_modifiers = control.no_modifiers == 1;
         data.linear = control.linear == 1;
+        data.map_host = control.map_host == 1;
         if (data.capturing && (old_no_modifiers != data.no_modifiers
-            || old_linear != data.linear)) {
+            || old_linear != data.linear
+            || old_map_host != data.map_host)) {
             data.need_reinit = true;
         }
     }
@@ -226,4 +230,9 @@ bool capture_allocate_no_modifiers()
 bool capture_allocate_linear()
 {
     return data.linear;
+}
+
+bool capture_allocate_map_host()
+{
+    return data.map_host;
 }
