@@ -20,6 +20,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 * libobs
 * libvulkan
 * libgl
+* libegl
 * libX11 (optional)
 * libxcb (optional)
 * libwayland-client (optional)
