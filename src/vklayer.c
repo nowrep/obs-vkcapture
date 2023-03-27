@@ -117,6 +117,7 @@ struct vk_data {
     struct vk_obj_node node;
 
     VkDevice device;
+    uint8_t device_uuid[16];
 
     bool valid;
 
@@ -589,6 +590,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     const bool no_modifiers = capture_allocate_no_modifiers();
     const bool linear = vkcapture_linear || capture_allocate_linear();
     const bool map_host = capture_allocate_map_host();
+    const bool same_device = capture_compare_device_uuid(data->device_uuid);
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
@@ -597,6 +599,10 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     } else {
         swap->export_format = VK_FORMAT_B8G8R8A8_UNORM;
         hlog("Converting to %s", vk_format_to_str(swap->export_format));
+    }
+
+    if (!same_device) {
+        hlog("OBS is running on different GPU");
     }
 
     // create image (for dedicated allocation)
@@ -1346,6 +1352,7 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *info,
     GETADDR(GetPhysicalDeviceMemoryProperties);
     GETADDR(GetPhysicalDeviceFormatProperties2KHR);
     GETADDR(GetPhysicalDeviceImageFormatProperties2KHR);
+    GETADDR(GetPhysicalDeviceProperties2KHR);
     GETADDR(EnumerateDeviceExtensionProperties);
 #if HAVE_X11_XCB
     GETADDR(CreateXcbSurfaceKHR);
@@ -1635,6 +1642,16 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
 
     init_obj_list(&data->swaps);
     data->cur_swap = NULL;
+
+    VkPhysicalDeviceIDProperties propsID = {};
+    propsID.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+
+    VkPhysicalDeviceProperties2 props = {};
+    props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    props.pNext = &propsID;
+    ifuncs->GetPhysicalDeviceProperties2KHR(phy_device, &props);
+
+    memcpy(data->device_uuid, propsID.deviceUUID, 16);
 
     data->valid = true;
 

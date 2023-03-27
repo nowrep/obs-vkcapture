@@ -49,6 +49,10 @@ static struct wl_display *wl_display = NULL;
 static wl_cursor_t *wlcursor = NULL;
 #endif
 
+#include <EGL/egl.h>
+static uint8_t gl_device_uuid[16];
+void (*p_glGetUnsignedBytei_vEXT)(unsigned int target, unsigned int index, unsigned char *data) = NULL;
+
 enum vkcapture_import_attempt {
     IMPORT_DEFAULT = 0,
     IMPORT_NO_MODIFIERS = 1,
@@ -335,6 +339,25 @@ static vkcapture_client_t *find_client_by_id(int id)
     return client;
 }
 
+static void fill_capture_control_data(struct capture_control_data *msg, vkcapture_client_t *client)
+{
+    if (!p_glGetUnsignedBytei_vEXT) {
+        obs_enter_graphics();
+        p_glGetUnsignedBytei_vEXT = (typeof(p_glGetUnsignedBytei_vEXT))
+            eglGetProcAddress("glGetUnsignedBytei_vEXT");
+        if (p_glGetUnsignedBytei_vEXT) {
+            p_glGetUnsignedBytei_vEXT(0x9597, 0, gl_device_uuid);
+        }
+        obs_leave_graphics();
+    }
+
+    msg->no_modifiers = !!(client->import_failures == IMPORT_NO_MODIFIERS);
+    msg->linear = !!(client->import_failures == IMPORT_LINEAR
+        || client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+    msg->map_host = !!(client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+    memcpy(msg->device_uuid, gl_device_uuid, 16);
+}
+
 static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client, bool activate)
 {
     struct capture_control_data msg;
@@ -346,9 +369,7 @@ static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client,
     } else {
         return;
     }
-    msg.no_modifiers = !!(client->import_failures == IMPORT_NO_MODIFIERS);
-    msg.linear = !!(client->import_failures == IMPORT_LINEAR || client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
-    msg.map_host = !!(client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+    fill_capture_control_data(&msg, client);
     client->buf_id = 0;
     for (int i = 0; i < 4; ++i) {
         if (client->buf_fds[i] >= 0) {
@@ -453,9 +474,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                     struct capture_control_data msg;
                     memset(&msg, 0, sizeof(msg));
                     msg.capturing = client->activated ? 1 : 0;
-                    msg.no_modifiers = !!(client->import_failures == IMPORT_NO_MODIFIERS);
-                    msg.linear = !!(client->import_failures == IMPORT_LINEAR || client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
-                    msg.map_host = !!(client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+                    fill_capture_control_data(&msg, client);
                     ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
                     if (ret != sizeof(msg)) {
                         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));

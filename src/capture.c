@@ -37,6 +37,7 @@ static struct {
     bool linear;
     bool map_host;
     bool need_reinit;
+    uint8_t device_uuid[16];
 } data;
 
 static bool get_wine_exe(char *buf, size_t bufsize)
@@ -137,6 +138,7 @@ void capture_update_socket()
         data.no_modifiers = control.no_modifiers == 1;
         data.linear = control.linear == 1;
         data.map_host = control.map_host == 1;
+        memcpy(data.device_uuid, control.device_uuid, 16);
         if (data.capturing && (old_no_modifiers != data.no_modifiers
             || old_linear != data.linear
             || old_map_host != data.map_host)) {
@@ -235,4 +237,9 @@ bool capture_allocate_linear()
 bool capture_allocate_map_host()
 {
     return data.map_host;
+}
+
+bool capture_compare_device_uuid(uint8_t uuid[16])
+{
+    return memcmp(data.device_uuid, uuid, 16) == 0;
 }
