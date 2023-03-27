@@ -661,6 +661,7 @@ static void server_cleanup_client(vkcapture_client_t *client)
 
     if (client->map_memory) {
         munmap(client->map_memory, client->map_size);
+        client->map_memory = NULL;
     }
 
     for (int i = 0; i < 4; ++i) {
