@@ -753,7 +753,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     memi.allocationSize = memr.memoryRequirements.size;
 
     bool allocated = false;
-    uint32_t mem_req_bits = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    uint32_t mem_req_bits = same_device ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     if (map_host) {
         mem_req_bits = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
     }
