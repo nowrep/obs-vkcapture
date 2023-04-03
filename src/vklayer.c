@@ -143,7 +143,7 @@ static void *vk_alloc(const VkAllocationCallbacks *ac, size_t size,
         size_t alignment, enum VkSystemAllocationScope scope)
 {
     return ac ? ac->pfnAllocation(ac->pUserData, size, alignment, scope)
-        : aligned_alloc(alignment, size);
+        : malloc(size);
 }
 
 static void vk_free(const VkAllocationCallbacks *ac, void *memory)
