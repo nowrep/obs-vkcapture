@@ -297,7 +297,6 @@ static bool gl_shtex_init()
             P_GLX_BIND_TO_TEXTURE_RGBA_EXT, true,
             P_GLX_DRAWABLE_TYPE, P_GLX_PIXMAP_BIT,
             P_GLX_BIND_TO_TEXTURE_TARGETS_EXT, P_GLX_TEXTURE_2D_BIT_EXT,
-            P_GLX_Y_INVERTED_EXT, true,
             P_GLX_DOUBLEBUFFER, false,
             P_GLX_RED_SIZE, 8,
             P_GLX_GREEN_SIZE, 8,
