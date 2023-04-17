@@ -18,6 +18,11 @@
 #include <fnmatch.h>
 #include "elfhacks.h"
 
+#ifndef __ELF_NATIVE_CLASS
+#include "sys/reg.h"
+#define __ELF_NATIVE_CLASS __WORDSIZE
+#endif
+
 /**
  *  \addtogroup elfhacks
  *  \{
