@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs-nix-platform.h>
+#include <obs/util/platform.h>
 
 #include <poll.h>
 #include <errno.h>
@@ -70,12 +71,15 @@ typedef struct {
     int import_failures;
     size_t map_size;
     void *map_memory;
+    uint64_t timeout;
+    bool unresponsive;
     struct capture_client_data cdata;
     struct capture_texture_data tdata;
 } vkcapture_client_t;
 
 static struct {
-    int quitfd;
+    bool quit;
+    int eventfd;
     pthread_t thread;
     pthread_mutex_t mutex;
     DARRAY(struct pollfd) fds;
@@ -102,6 +106,8 @@ typedef struct {
     struct capture_texture_data tdata;
 
 } vkcapture_source_t;
+
+static bool server_wakeup();
 
 static const char *import_attempt_str(enum vkcapture_import_attempt attempt)
 {
@@ -382,6 +388,7 @@ static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client,
     if (ret != sizeof(msg)) {
         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
     }
+    client->timeout = os_gettime_ns() + 5000000000; // 5s timeout
 }
 
 static void vkcapture_source_show(void *data)
@@ -484,8 +491,15 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 }
             }
             ctx->buf_id = client->buf_id;
+            client->timeout = 0;
         } else if (client != find_matching_client(ctx)) {
             activate_client(ctx, client, false);
+            ctx->client_id = 0;
+            destroy_texture(ctx);
+        } else if (client->timeout && os_gettime_ns() > client->timeout) {
+            blog(LOG_INFO, "Client %d not responding, disconnecting...", client->id);
+            client->unresponsive = true;
+            server_wakeup();
             ctx->client_id = 0;
             destroy_texture(ctx);
         }
@@ -641,6 +655,12 @@ static struct obs_source_info vkcapture_input = {
     .icon_type = OBS_ICON_TYPE_GAME_CAPTURE,
 };
 
+static bool server_wakeup()
+{
+    uint64_t q = 1;
+    return write(server.eventfd, &q, sizeof(q)) == sizeof(q);
+}
+
 static void server_add_fd(int fd, int events)
 {
     struct pollfd p;
@@ -674,6 +694,8 @@ static bool server_has_event_on_fd(int fd)
 static void server_cleanup_client(vkcapture_client_t *client)
 {
     pthread_mutex_lock(&server.mutex);
+
+    blog(LOG_INFO, "Client %d disconnected", client->id);
 
     close(client->sockfd);
     server_remove_fd(client->sockfd);
@@ -724,7 +746,7 @@ static void *server_thread_run(void *data)
     }
 
     server_add_fd(sockfd, POLLIN);
-    server_add_fd(server.quitfd, POLLIN);
+    server_add_fd(server.eventfd, POLLIN);
 
     while (true) {
         int ret = poll(server.fds.array, server.fds.num, -1);
@@ -732,7 +754,7 @@ static void *server_thread_run(void *data)
             continue;
         }
 
-        if (server_has_event_on_fd(server.quitfd)) {
+        if (server_has_event_on_fd(server.eventfd) && server.quit) {
             break;
         }
 
@@ -748,6 +770,13 @@ static void *server_thread_run(void *data)
                 da_push_back(server.clients, &client);
                 pthread_mutex_unlock(&server.mutex);
                 server_add_fd(client.sockfd, POLLIN);
+                struct ucred cred;
+                memset(&cred, 0, sizeof(cred));
+                socklen_t cred_len = sizeof(cred);
+                if (getsockopt(client.sockfd, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) != 0) {
+                    blog(LOG_WARNING, "Failed to get socket credentials: %s", strerror(errno));
+                }
+                blog(LOG_INFO, "Client %d connected (pid=%d)", client.id, cred.pid);
             } else {
                 if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
                     blog(LOG_ERROR, "Cannot accept unix socket: %s", strerror(errno));
@@ -757,6 +786,10 @@ static void *server_thread_run(void *data)
 
         for (size_t i = 0; i < server.clients.num; i++) {
             vkcapture_client_t *client = server.clients.array + i;
+            if (client->unresponsive) {
+                server_cleanup_client(client);
+                continue;
+            }
             if (!server_has_event_on_fd(client->sockfd)) {
                 continue;
             }
@@ -863,8 +896,8 @@ bool obs_module_load(void)
         return false;
     }
 
-    server.quitfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-    if (server.quitfd < 0) {
+    server.eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (server.eventfd < 0) {
         blog(LOG_ERROR, "Failed to create eventfd: %s", strerror(errno));
         return false;
     }
@@ -883,8 +916,8 @@ bool obs_module_load(void)
 
 void obs_module_unload()
 {
-    uint64_t q = 1;
-    if (write(server.quitfd, &q, sizeof(q)) == sizeof(q)) {
+    server.quit = true;
+    if (server_wakeup()) {
         pthread_join(server.thread, NULL);
     }
 
