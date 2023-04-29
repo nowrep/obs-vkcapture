@@ -20,7 +20,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs-nix-platform.h>
-#include <obs/util/platform.h>
 
 #include <poll.h>
 #include <errno.h>
@@ -118,6 +117,13 @@ static const char *import_attempt_str(enum vkcapture_import_attempt attempt)
     case IMPORT_LINEAR_HOST_MAPPED: return "linear host mapped";
     default: return "invalid";
     }
+}
+
+static int64_t clock_ns()
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000000000 + t.tv_nsec;
 }
 
 static void cursor_create(vkcapture_source_t *ctx)
@@ -388,7 +394,7 @@ static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client,
     if (ret != sizeof(msg)) {
         blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
     }
-    client->timeout = os_gettime_ns() + 5000000000; // 5s timeout
+    client->timeout = clock_ns() + 5000000000; // 5s timeout
 }
 
 static void vkcapture_source_show(void *data)
@@ -496,7 +502,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             activate_client(ctx, client, false);
             ctx->client_id = 0;
             destroy_texture(ctx);
-        } else if (client->timeout && os_gettime_ns() > client->timeout) {
+        } else if (client->timeout && clock_ns() > client->timeout) {
             blog(LOG_INFO, "Client %d not responding, disconnecting...", client->id);
             client->unresponsive = true;
             server_wakeup();
