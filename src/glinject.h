@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <vulkan/vulkan.h>
 
 #define P_EGL_HEIGHT 0x3056
 #define P_EGL_WIDTH 0x3057
@@ -154,6 +155,33 @@ struct x11_funcs {
     int *(*xcb_dri3_buffers_from_pixmap_reply_fds)(void *c, P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
     uint32_t *(*xcb_dri3_buffers_from_pixmap_strides)(P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
     uint32_t *(*xcb_dri3_buffers_from_pixmap_offsets)(P_xcb_dri3_buffers_from_pixmap_reply_t *reply);
+
+    bool valid;
+};
+
+struct vk_funcs {
+    PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+    PFN_vkGetDeviceProcAddr GetDeviceProcAddr;
+    PFN_vkCreateInstance CreateInstance;
+    PFN_vkDestroyInstance DestroyInstance;
+    PFN_vkCreateDevice CreateDevice;
+    PFN_vkDestroyDevice DestroyDevice;
+
+    PFN_vkEnumeratePhysicalDevices EnumeratePhysicalDevices;
+    PFN_vkGetPhysicalDeviceProperties2 GetPhysicalDeviceProperties2;
+    PFN_vkGetPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProperties;
+    PFN_vkGetPhysicalDeviceFormatProperties2KHR GetPhysicalDeviceFormatProperties2KHR;
+    PFN_vkGetPhysicalDeviceImageFormatProperties2KHR GetPhysicalDeviceImageFormatProperties2KHR;
+
+    PFN_vkCreateImage CreateImage;
+    PFN_vkDestroyImage DestroyImage;
+    PFN_vkAllocateMemory AllocateMemory;
+    PFN_vkFreeMemory FreeMemory;
+    PFN_vkGetImageSubresourceLayout GetImageSubresourceLayout;
+    PFN_vkGetImageMemoryRequirements2KHR GetImageMemoryRequirements2KHR;
+    PFN_vkGetImageDrmFormatModifierPropertiesEXT GetImageDrmFormatModifierPropertiesEXT;
+    PFN_vkBindImageMemory2KHR BindImageMemory2KHR;
+    PFN_vkGetMemoryFdKHR GetMemoryFdKHR;
 
     bool valid;
 };

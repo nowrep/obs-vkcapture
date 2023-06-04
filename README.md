@@ -38,10 +38,6 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 2. Start the game with capture enabled `obs-gamecapture %command%`.
 3. (Recommended) Start the game with only Vulkan capture enabled `env OBS_VKCAPTURE=1 %command%`.
 
-## Known Issues
-
-* OpenGL GLX capture doesn't work with NVIDIA driver
-
 ## Troubleshooting
 
 **NVIDIA**
