@@ -605,9 +605,13 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         hlog("OBS is running on different GPU");
     }
 
-    // create image (for dedicated allocation)
+    VkExternalMemoryImageCreateInfo ext_mem_image_info = {};
+    ext_mem_image_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    ext_mem_image_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
     VkImageCreateInfo img_info = {};
     img_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    img_info.pNext = &ext_mem_image_info;
     img_info.imageType = VK_IMAGE_TYPE_2D;
     img_info.format = swap->export_format;
     img_info.mipLevels = 1;
@@ -623,7 +627,6 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     int num_planes = 1;
     uint64_t *image_modifiers = NULL;
-    VkExternalMemoryImageCreateInfo ext_mem_image_info = {};
     VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list = {};
     struct VkDrmFormatModifierPropertiesEXT *modifier_props = NULL;
     uint32_t modifier_prop_count = 0;
@@ -698,11 +701,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             image_modifier_list.drmFormatModifierCount = modifier_prop_count;
             image_modifier_list.pDrmFormatModifiers = image_modifiers;
             img_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-            img_info.pNext = &image_modifier_list;
-
-            ext_mem_image_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-            ext_mem_image_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-            image_modifier_list.pNext = &ext_mem_image_info;
+            ext_mem_image_info.pNext = &image_modifier_list;
         } else {
             hlog("No suitable DRM modifier found!");
         }
