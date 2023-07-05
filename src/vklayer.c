@@ -273,12 +273,6 @@ static struct vk_data *remove_device_data(VkDevice device)
             (uintptr_t)GET_LDT(device));
 }
 
-static void free_device_data(struct vk_data *data,
-        const VkAllocationCallbacks *ac)
-{
-    vk_free(ac, data);
-}
-
 /* ------------------------------------------------------------------------- */
 
 static struct vk_queue_data *add_queue_data(struct vk_data *data, VkQueue queue,
@@ -306,11 +300,6 @@ static struct vk_queue_data *get_queue_data(struct vk_data *data, VkQueue queue)
 {
     return (struct vk_queue_data *)get_obj_data(&data->queues,
             (uintptr_t)queue);
-}
-
-static VkQueue get_queue_key(const struct vk_queue_data *queue_data)
-{
-    return (VkQueue)(uintptr_t)queue_data->node.obj;
 }
 
 static void remove_free_queue_all(struct vk_data *data,
