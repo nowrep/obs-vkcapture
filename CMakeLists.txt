@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(obs-vkcapture VERSION 1.4.0)
+project(obs-vkcapture VERSION 1.4.1)
 
 include(GNUInstallDirs)
 find_package(Vulkan REQUIRED)
