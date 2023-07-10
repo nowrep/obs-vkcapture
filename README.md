@@ -42,7 +42,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 
 **NVIDIA**
 
-Driver version >= 515.43.04 and `nvidia-drm.modeset=1` kernel parameter are required.
+Driver version >= 515.43.04 and `nvidia-drm.modeset=1` kernel parameter are required. In Wayland session make sure OBS is running on Wayland and not XWayland.
 
 **No Game Capture source available in OBS 27**
 
