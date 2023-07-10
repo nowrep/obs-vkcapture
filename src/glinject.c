@@ -40,6 +40,8 @@ static struct glx_funcs glx_f;
 static struct x11_funcs x11_f;
 static struct vk_funcs vk_f;
 
+static bool vkcapture_glvulkan = false;
+
 struct gl_data {
     void *display;
     void *surface;
@@ -115,6 +117,8 @@ static bool gl_init_funcs(bool glx)
     egl_f.valid = false;
     glx_f.valid = false;
     x11_f.valid = false;
+
+    vkcapture_glvulkan = getenv("OBS_VKCAPTURE_GLVULKAN");
 
     capture_init();
     memset(&data, 0, sizeof(struct gl_data));
@@ -768,6 +772,18 @@ static void gl_shtex_capture()
 
 static bool gl_shtex_init()
 {
+    if (vkcapture_glvulkan) {
+        return false;
+    }
+
+    if (data.glx) {
+        // GLX on NVIDIA is all kinds of broken...
+        const char *vendor = (const char*)glGetString(GL_VENDOR);
+        if (strcmp(vendor, "NVIDIA Corporation") == 0) {
+            return false;
+        }
+    }
+
     glGenFramebuffers(1, &data.fbo);
     if (data.fbo == 0) {
         hlog("Failed to initialize FBO");
@@ -885,10 +901,7 @@ static bool gl_init(void *display, void *surface)
     GLint last_tex;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
 
-    bool init = false;
-    if (!getenv("OBS_VKCAPTURE_GLVULKAN")) {
-        init = gl_shtex_init();
-    }
+    bool init = gl_shtex_init();
     if (!init) {
         init = vulkan_shtex_init();
     }
