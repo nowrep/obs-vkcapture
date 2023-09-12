@@ -75,7 +75,12 @@ struct capture_control_data {
 #define CAPTURE_CONTROL_DATA_SIZE 32
 static_assert(sizeof(struct capture_control_data) == CAPTURE_CONTROL_DATA_SIZE, "size mismatch");
 
+struct wl_display;
+struct wl_surface;
+
 void capture_init();
+void capture_init_wayland(struct wl_display *display, struct wl_surface *surface);
+void capture_destroy_wayland();
 void capture_update_socket();
 void capture_init_shtex(
         int width, int height, int format, int strides[4],

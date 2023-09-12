@@ -29,6 +29,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <sys/un.h>
 #include <sys/socket.h>
 
+#include "capture_wayland.h"
+
 static struct {
     int connfd;
     bool accepted;
@@ -117,6 +119,8 @@ void capture_init()
 
 void capture_update_socket()
 {
+    capture_update_wayland();
+
     static int64_t last_check = 0;
     const int64_t now = os_time_get_nano();
     if (now - last_check < 1000000000) {

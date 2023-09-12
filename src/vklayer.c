@@ -1813,6 +1813,7 @@ static VkResult VKAPI_CALL OBS_CreateWaylandSurfaceKHR(
 
     VkResult res = ifuncs->CreateWaylandSurfaceKHR(inst, info, ac, surf);
     if ((res == VK_SUCCESS) && idata->valid) {
+        capture_init_wayland(info->display, info->surface);
         add_surf_data(idata, *surf, (uintptr_t)info->surface, ac);
     }
     return res;
@@ -1834,6 +1835,8 @@ static void VKAPI_CALL OBS_DestroySurfaceKHR(VkInstance inst, VkSurfaceKHR surf,
         remove_free_surf_data(idata, surf, ac);
 
     destroy_surface(inst, surf, ac);
+
+    capture_destroy_wayland();
 }
 
 #define GETPROCADDR(func)               \

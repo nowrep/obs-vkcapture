@@ -95,7 +95,7 @@ if (BUILD_PLUGIN)
     endif()
 endif()
 
-set(LAYER_SOURCES src/vklayer.c src/capture.c)
+set(LAYER_SOURCES src/vklayer.c src/capture.c src/capture_wayland.c src/subhook/subhook.c)
 add_library(VkLayer_obs_vkcapture MODULE ${LAYER_SOURCES})
 set_target_properties(VkLayer_obs_vkcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=\"${CMAKE_CURRENT_SOURCE_DIR}/src/vklayer.version\"")
 target_link_libraries(VkLayer_obs_vkcapture Vulkan::Vulkan)
