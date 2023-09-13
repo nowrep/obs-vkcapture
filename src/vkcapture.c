@@ -128,19 +128,8 @@ static int64_t clock_ns()
 
 static void cursor_create(vkcapture_source_t *ctx)
 {
-#if HAVE_X11_XCB
-    if (obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
-        if (!xcb) {
-            xcb = xcb_connect(NULL, NULL);
-            if (!xcb || xcb_connection_has_error(xcb)) {
-                blog(LOG_ERROR, "Unable to open X display!");
-            }
-        }
-        if (xcb) {
-            ctx->xcursor = xcb_xcursor_init(xcb);
-        }
-    }
-#endif
+    bool try_xcb = false;
+
 #if HAVE_WAYLAND
     if (obs_get_nix_platform() == OBS_NIX_PLATFORM_WAYLAND) {
         if (!wl_display) {
@@ -151,6 +140,22 @@ static void cursor_create(vkcapture_source_t *ctx)
         }
         if (wl_display && !wlcursor) {
             wlcursor = wl_cursor_init(wl_display);
+            if (!wlcursor) {
+                try_xcb = true;
+            }
+        }
+    }
+#endif
+#if HAVE_X11_XCB
+    if (try_xcb || obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
+        if (!xcb) {
+            xcb = xcb_connect(NULL, NULL);
+            if (!xcb || xcb_connection_has_error(xcb)) {
+                blog(LOG_ERROR, "Unable to open X display!");
+            }
+        }
+        if (xcb) {
+            ctx->xcursor = xcb_xcursor_init(xcb);
         }
     }
 #endif
