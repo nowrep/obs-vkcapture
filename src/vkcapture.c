@@ -377,8 +377,7 @@ static void fill_capture_control_data(struct capture_control_data *msg, vkcaptur
 
 static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client, bool activate)
 {
-    struct capture_control_data msg;
-    memset(&msg, 0, sizeof(msg));
+    struct capture_control_data msg = {0};
     if (activate && !client->activated++) {
         msg.capturing = 1;
     } else if (!activate && !--client->activated) {
@@ -460,8 +459,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                     client->import_failures++;
                     blog(LOG_WARNING, "Asking client to create texture %s",
                         import_attempt_str(client->import_failures));
-                    struct capture_control_data msg;
-                    memset(&msg, 0, sizeof(msg));
+                    struct capture_control_data msg = {0};
                     msg.capturing = client->activated ? 1 : 0;
                     fill_capture_control_data(&msg, client);
                     ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
@@ -741,8 +739,7 @@ static void *server_thread_run(void *data)
         if (server_has_event_on_fd(sockfd)) {
             int clientfd = accept4(sockfd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
             if (clientfd >= 0) {
-                vkcapture_client_t client;
-                memset(&client, 0, sizeof(client));
+                vkcapture_client_t client = {0};
                 memset(&client.buf_fds, -1, sizeof(client.buf_fds));
                 client.id = ++clientid;
                 client.sockfd = clientfd;
@@ -750,8 +747,7 @@ static void *server_thread_run(void *data)
                 da_push_back(server.clients, &client);
                 pthread_mutex_unlock(&server.mutex);
                 server_add_fd(client.sockfd, POLLIN);
-                struct ucred cred;
-                memset(&cred, 0, sizeof(cred));
+                struct ucred cred = {0};
                 socklen_t cred_len = sizeof(cred);
                 if (getsockopt(client.sockfd, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) != 0) {
                     blog(LOG_WARNING, "Failed to get socket credentials: %s", strerror(errno));
@@ -824,8 +820,7 @@ static void *server_thread_run(void *data)
 
                     const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
 
-                    int buf_fds[4];
-                    memset(buf_fds, -1, sizeof(buf_fds));
+                    int buf_fds[4] = {-1, -1, -1, -1};
                     for (size_t i = 0; i < nfd; ++i) {
                         buf_fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
                     }
