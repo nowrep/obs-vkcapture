@@ -126,6 +126,34 @@ static int64_t clock_ns()
     return t.tv_sec * 1000000000 + t.tv_nsec;
 }
 
+static const struct {
+    int32_t drm;
+    enum gs_color_format gs;
+} gs_format_table[] = {
+    { DRM_FORMAT_ARGB8888, GS_BGRA },
+    { DRM_FORMAT_XRGB8888, GS_BGRX },
+    { DRM_FORMAT_ABGR8888, GS_RGBA },
+    { DRM_FORMAT_XBGR8888, GS_RGBA },
+    { DRM_FORMAT_ARGB2101010, GS_R10G10B10A2 },
+    { DRM_FORMAT_XRGB2101010, GS_R10G10B10A2 },
+    { DRM_FORMAT_ABGR2101010, GS_R10G10B10A2 },
+    { DRM_FORMAT_XBGR2101010, GS_R10G10B10A2 },
+    { DRM_FORMAT_ABGR16161616, GS_RGBA16 },
+    { DRM_FORMAT_XBGR16161616, GS_RGBA16 },
+    { DRM_FORMAT_ABGR16161616F, GS_RGBA16F },
+    { DRM_FORMAT_XBGR16161616F, GS_RGBA16F },
+};
+
+static enum gs_color_format drm_format_to_gs(int32_t drm)
+{
+    for (size_t i = 0; i < sizeof(gs_format_table) / sizeof(gs_format_table[0]); ++i) {
+        if (gs_format_table[i].drm == drm) {
+            return gs_format_table[i].gs;
+        }
+    }
+    return GS_UNKNOWN;
+}
+
 static void cursor_create(vkcapture_source_t *ctx)
 {
     bool try_xcb = false;
@@ -443,14 +471,14 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                 } else {
                     obs_enter_graphics();
                     ctx->texture = gs_texture_create(ctx->tdata.width, ctx->tdata.height,
-                        ctx->tdata.format == DRM_FORMAT_ARGB8888 ? GS_BGRA : GS_RGBA, 1, NULL, GS_DYNAMIC);
+                        drm_format_to_gs(ctx->tdata.format), 1, NULL, GS_DYNAMIC);
                     obs_leave_graphics();
                 }
             } else {
                 obs_enter_graphics();
                 ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
-                        ctx->tdata.format, GS_BGRX, ctx->tdata.nfd, client->buf_fds, strides, offsets,
-                        ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
+                    ctx->tdata.format, drm_format_to_gs(ctx->tdata.format), ctx->tdata.nfd, client->buf_fds,
+                    strides, offsets, ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
                 obs_leave_graphics();
             }
 

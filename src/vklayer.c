@@ -545,28 +545,36 @@ static void remove_free_inst_data(VkInstance inst,
 /* ======================================================================== */
 /* capture                                                                  */
 
-static bool vk_format_requires_conversion(VkFormat format)
-{
-    switch (format) {
-    case VK_FORMAT_B8G8R8A8_UNORM:
-    case VK_FORMAT_R8G8B8A8_UNORM:
-    case VK_FORMAT_B8G8R8A8_SRGB:
-    case VK_FORMAT_R8G8B8A8_SRGB:
-        return false;
-    default:
-        return true;
-    }
-}
+static const struct {
+    int32_t drm;
+    VkFormat vk;
+} vk_format_table[] = {
+    { DRM_FORMAT_ARGB8888, VK_FORMAT_B8G8R8A8_UNORM },
+    { DRM_FORMAT_ARGB8888, VK_FORMAT_B8G8R8A8_SRGB },
+    { DRM_FORMAT_XRGB8888, VK_FORMAT_B8G8R8A8_UNORM },
+    { DRM_FORMAT_XRGB8888, VK_FORMAT_B8G8R8A8_SRGB },
+    { DRM_FORMAT_ABGR8888, VK_FORMAT_R8G8B8A8_UNORM },
+    { DRM_FORMAT_ABGR8888, VK_FORMAT_R8G8B8A8_SRGB },
+    { DRM_FORMAT_XBGR8888, VK_FORMAT_R8G8B8A8_UNORM },
+    { DRM_FORMAT_XBGR8888, VK_FORMAT_R8G8B8A8_SRGB },
+    { DRM_FORMAT_ARGB2101010, VK_FORMAT_A2R10G10B10_UNORM_PACK32 },
+    { DRM_FORMAT_XRGB2101010, VK_FORMAT_A2R10G10B10_UNORM_PACK32 },
+    { DRM_FORMAT_ABGR2101010, VK_FORMAT_A2B10G10R10_UNORM_PACK32 },
+    { DRM_FORMAT_XBGR2101010, VK_FORMAT_A2B10G10R10_UNORM_PACK32 },
+    { DRM_FORMAT_ABGR16161616, VK_FORMAT_R16G16B16A16_UNORM },
+    { DRM_FORMAT_XBGR16161616, VK_FORMAT_R16G16B16A16_UNORM },
+    { DRM_FORMAT_ABGR16161616F, VK_FORMAT_R16G16B16A16_SFLOAT },
+    { DRM_FORMAT_XBGR16161616F, VK_FORMAT_R16G16B16A16_SFLOAT },
+};
 
-static bool vk_format_is_bgra(VkFormat format)
+static int32_t vk_format_to_drm(VkFormat vk)
 {
-    switch (format) {
-    case VK_FORMAT_B8G8R8A8_UNORM:
-    case VK_FORMAT_B8G8R8A8_SRGB:
-        return true;
-    default:
-        return false;
+    for (size_t i = 0; i < sizeof(vk_format_table) / sizeof(vk_format_table[0]); ++i) {
+        if (vk_format_table[i].vk == vk) {
+            return vk_format_table[i].drm;
+        }
     }
+    return -1;
 }
 
 static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
@@ -583,7 +591,7 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
 
     hlog("Texture %s %ux%u", vk_format_to_str(swap->format), swap->image_extent.width, swap->image_extent.height);
 
-    if (!vk_format_requires_conversion(swap->format)) {
+    if (vk_format_to_drm(swap->format) != -1) {
         swap->export_format = swap->format;
     } else {
         swap->export_format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -864,7 +872,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     data->cur_swap = swap;
 
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
-        vk_format_is_bgra(swap->export_format) ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_ABGR8888,
+        vk_format_to_drm(swap->export_format),
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
         swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
 
