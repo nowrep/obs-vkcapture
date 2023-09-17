@@ -165,7 +165,7 @@ void capture_init_shtex(
         int offsets[4], uint64_t modifier, uint32_t winid,
         bool flip, int nfd, int fds[4])
 {
-    struct capture_texture_data td;
+    struct capture_texture_data td = {0};
     td.type = CAPTURE_TEXTURE_DATA_TYPE;
     td.nfd = nfd;
     td.width = width;
