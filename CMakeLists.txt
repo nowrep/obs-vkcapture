@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(obs-vkcapture
    LANGUAGES C
-   VERSION 1.4.2)
+   VERSION 1.4.3)
 
 include(GNUInstallDirs)
 find_package(Vulkan REQUIRED)
