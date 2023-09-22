@@ -31,7 +31,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <vulkan/vulkan_xlib.h>
 #endif
 #if HAVE_WAYLAND
-#include <wayland-client.h>
 #include <vulkan/vulkan_wayland.h>
 #endif
 
