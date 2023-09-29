@@ -1341,6 +1341,11 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *info,
         }                                       \
     } while (false)
 
+#define GETADDR_IF_SUPPORTED(x)                                      \
+    do {                                            \
+        ifuncs->x = (PFN_vk##x)gpa(inst, "vk" #x); \
+    } while (false)
+
     bool funcs_found = true;
     GETADDR(GetInstanceProcAddr);
     GETADDR(DestroyInstance);
@@ -1351,15 +1356,15 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *info,
     GETADDR(GetPhysicalDeviceProperties2KHR);
     GETADDR(EnumerateDeviceExtensionProperties);
 #if HAVE_X11_XCB
-    GETADDR(CreateXcbSurfaceKHR);
+    GETADDR_IF_SUPPORTED(CreateXcbSurfaceKHR);
 #endif
 #if HAVE_X11_XLIB
-    GETADDR(CreateXlibSurfaceKHR);
+    GETADDR_IF_SUPPORTED(CreateXlibSurfaceKHR);
 #endif
 #if HAVE_WAYLAND
-    GETADDR(CreateWaylandSurfaceKHR);
+    GETADDR_IF_SUPPORTED(CreateWaylandSurfaceKHR);
 #endif
-    GETADDR(DestroySurfaceKHR);
+    GETADDR_IF_SUPPORTED(DestroySurfaceKHR);
 #undef GETADDR
 
     valid = valid && funcs_found;
