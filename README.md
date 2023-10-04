@@ -10,7 +10,7 @@ AUR: [obs-vkcapture-git](https://aur.archlinux.org/packages/obs-vkcapture-git/)
 
 ## About Flatpak
 If you use Flatpak OBS, you need to install Flatpak *OBS plugin*.  
-If you use Flatpak Steam, you need to install Flatpak *Capture tools* to be able to capture games running inside Flatpak Steam runtine.
+If you want to capture games that are also installed as a Flatpak, you need to install Flatpak *Capture tools* to be able to capture them.
 
 For capturing games outside Flatpak runtime, you need native build regardless of if you are using Flatpak OBS or not.
 
