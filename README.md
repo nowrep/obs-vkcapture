@@ -36,7 +36,9 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 
 1. Add `Game Capture` to your OBS scene.
 2. Start the game with capture enabled `obs-gamecapture %command%`.
+    - To start a Flatpak game with this argument, you can use this template: `flatpak run -command=/usr/lib/extensions/vulkan/OBSVkCapture/bin/obs-gamecapture foo.bar.Bar /app/bin/bar`
 3. (Recommended) Start the game with only Vulkan capture enabled `env OBS_VKCAPTURE=1 %command%`.
+    - In the Flatpak environment, you can add this environment variable like such: `flatpak override --user foo.bar.Bar --env=OBS_VKCAPTURE=1`
 
 ## Troubleshooting
 
