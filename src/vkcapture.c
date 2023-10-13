@@ -98,7 +98,7 @@ typedef struct {
     bool allow_transparency;
     bool window_match;
     bool window_exclude;
-const char *window;
+    const char *window;
 
     int buf_id;
     int client_id;
