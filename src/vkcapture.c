@@ -637,7 +637,7 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
         obs_property_list_add_string(p, name, value);
     }
 
-    if (ctx == NULL || cursor_enabled(ctx)) {
+    if (!ctx || cursor_enabled(ctx)) {
         obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
     }
 
