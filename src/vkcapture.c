@@ -933,7 +933,7 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 MODULE_EXPORT const char *obs_module_name(void)
 {
-    return obs_module_text("GameCapture");
+    return PLUGIN_NAME;
 }
 
 MODULE_EXPORT const char *obs_module_description(void)
