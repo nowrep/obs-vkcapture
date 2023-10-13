@@ -98,7 +98,7 @@ typedef struct {
     bool allow_transparency;
     bool window_match;
     bool window_exclude;
-    const char *window;
+const char *window;
 
     int buf_id;
     int client_id;
@@ -611,18 +611,20 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
             OBS_COMBO_FORMAT_STRING);
     obs_property_list_add_string(p, obs_module_text("CaptureAnyWindow"), "");
 
-    bool window_found = false;
-    pthread_mutex_lock(&server.mutex);
-    for (size_t i = 0; i < server.clients.num; i++) {
-        vkcapture_client_t *client = server.clients.array + i;
-        obs_property_list_add_string(p, client->cdata.exe, client->cdata.exe);
-        if (ctx->window && !strcmp(client->cdata.exe, ctx->window)) {
-            window_found = true;
+    if (ctx) {
+        bool window_found = false;
+        pthread_mutex_lock(&server.mutex);
+        for (size_t i = 0; i < server.clients.num; i++) {
+            vkcapture_client_t *client = server.clients.array + i;
+            obs_property_list_add_string(p, client->cdata.exe, client->cdata.exe);
+            if (ctx->window && !strcmp(client->cdata.exe, ctx->window)) {
+                window_found = true;
+            }
         }
-    }
-    pthread_mutex_unlock(&server.mutex);
-    if (ctx->window && !window_found) {
-        obs_property_list_add_string(p, ctx->window, ctx->window);
+        pthread_mutex_unlock(&server.mutex);
+        if (ctx->window && !window_found) {
+            obs_property_list_add_string(p, ctx->window, ctx->window);
+        }
     }
 
     size_t count = obs_property_list_item_count(p);
@@ -635,7 +637,7 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
         obs_property_list_add_string(p, name, value);
     }
 
-    if (cursor_enabled(ctx)) {
+    if (ctx == NULL || cursor_enabled(ctx)) {
         obs_properties_add_bool(props, "show_cursor", obs_module_text("CaptureCursor"));
     }
 
