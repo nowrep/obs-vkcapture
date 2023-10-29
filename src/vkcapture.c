@@ -892,7 +892,7 @@ static void *server_thread_run(void *data)
 bool obs_module_load(void)
 {
     enum obs_nix_platform_type platform = obs_get_nix_platform();
-#if HAVE_WAYLAND
+#if HAVE_WAYLAND || LIBOBS_API_MAJOR_VER >= 30
     if (platform != OBS_NIX_PLATFORM_X11_EGL && platform != OBS_NIX_PLATFORM_WAYLAND) {
 #else
     if (platform != OBS_NIX_PLATFORM_X11_EGL) {
