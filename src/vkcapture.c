@@ -912,6 +912,7 @@ bool obs_module_load(void)
         blog(LOG_ERROR, "Failed to create thread");
         return false;
     }
+    pthread_setname_np(server.thread, PLUGIN_NAME);
 
     obs_register_source(&vkcapture_input);
     blog(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
