@@ -762,8 +762,12 @@ static void *server_thread_run(void *data)
             continue;
         }
 
-        if (server_has_event_on_fd(server.eventfd) && server.quit) {
-            break;
+        if (server_has_event_on_fd(server.eventfd)) {
+            uint64_t q;
+            read(server.eventfd, &q, sizeof(q));
+            if (server.quit) {
+                break;
+            }
         }
 
         if (server_has_event_on_fd(sockfd)) {
