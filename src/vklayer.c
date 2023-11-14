@@ -1928,7 +1928,12 @@ VKAPI_ATTR VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInterface *nli)
     }
 
     if (!vulkan_seen) {
-        hlog("Init Vulkan %s", PLUGIN_VERSION);
+        hlog("Init Vulkan %s (%s)", PLUGIN_VERSION,
+#ifdef __x86_64__
+            "64bit");
+#else
+            "32bit");
+#endif
         init_obj_list(&instances);
         init_obj_list(&devices);
         capture_init();
