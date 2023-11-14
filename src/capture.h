@@ -63,7 +63,8 @@ struct capture_texture_data {
     uint64_t modifier;
     uint32_t winid;
     uint8_t flip;
-    uint8_t padding[69];
+    uint32_t color_space;
+    uint8_t padding[65];
 } __attribute__((packed));
 
 #define CAPTURE_TEXTURE_DATA_TYPE 11
@@ -88,7 +89,7 @@ void capture_update_socket();
 void capture_init_shtex(
         int width, int height, int format, int strides[4],
         int offsets[4], uint64_t modifier, uint32_t winid,
-        bool flip, int nfd, int fds[4]);
+        bool flip, uint32_t color_space, int nfd, int fds[4]);
 void capture_stop();
 
 bool capture_should_stop();

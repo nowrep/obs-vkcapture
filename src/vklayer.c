@@ -63,6 +63,7 @@ struct vk_swap_data {
 
     VkExtent2D image_extent;
     VkFormat format;
+    VkColorSpaceKHR color_space;
     uint64_t winid;
     VkImage export_image;
     VkFormat export_format;
@@ -874,7 +875,8 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
         vk_format_to_drm(swap->export_format),
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
-        swap->winid, /*flip*/false, swap->dmabuf_nfd, swap->dmabuf_fds);
+        swap->winid, /*flip*/false, swap->color_space,
+        swap->dmabuf_nfd, swap->dmabuf_fds);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;
@@ -1732,6 +1734,7 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
 #endif
             swap_data->image_extent = cinfo->imageExtent;
             swap_data->format = cinfo->imageFormat;
+            swap_data->color_space = cinfo->imageColorSpace;
             swap_data->winid = find_surf_winid(data->inst_data, cinfo->surface);
             swap_data->export_image = VK_NULL_HANDLE;
             swap_data->export_mem = VK_NULL_HANDLE;

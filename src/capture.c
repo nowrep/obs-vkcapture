@@ -163,7 +163,7 @@ void capture_update_socket()
 void capture_init_shtex(
         int width, int height, int format, int strides[4],
         int offsets[4], uint64_t modifier, uint32_t winid,
-        bool flip, int nfd, int fds[4])
+        bool flip, uint32_t color_space, int nfd, int fds[4])
 {
     struct capture_texture_data td = {0};
     td.type = CAPTURE_TEXTURE_DATA_TYPE;
@@ -176,6 +176,7 @@ void capture_init_shtex(
     td.modifier = modifier;
     td.winid = winid;
     td.flip = flip;
+    td.color_space = color_space;
 
     struct msghdr msg = {0};
 
