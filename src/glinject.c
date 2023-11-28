@@ -623,6 +623,9 @@ static bool vulkan_shtex_init()
         return false;
     }
 
+    // Reset error
+    while (gl_f.GetError() != GL_NO_ERROR) { }
+
     GLuint glmem;
     gl_f.CreateMemoryObjectsEXT(1, &glmem);
     GLint dedicated = GL_TRUE;
