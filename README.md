@@ -1,6 +1,6 @@
 # OBS Linux Vulkan/OpenGL Game Capture
 
-An OBS plugin for capturing Vulkan and OpenGL games on Linux.
+OBS plugin for Vulkan/OpenGL game capture on Linux.
 
 ## Installation
 
