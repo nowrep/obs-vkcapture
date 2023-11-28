@@ -20,7 +20,37 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <GL/glcorearb.h>
+#include <GL/glext.h>
 #include <vulkan/vulkan.h>
+
+struct gl_funcs {
+    void *(*GetProcAddress)(const char*);
+    PFNGLGENFRAMEBUFFERSPROC GenFramebuffers;
+    PFNGLGENTEXTURESEXTPROC GenTextures;
+    PFNGLTEXIMAGE2DPROC TexImage2D;
+    PFNGLTEXPARAMETERIPROC TexParameteri;
+    PFNGLGETINTEGERVPROC GetIntegerv;
+    PFNGLBINDTEXTUREPROC BindTexture;
+    PFNGLDELETEFRAMEBUFFERSPROC DeleteFramebuffers;
+    PFNGLDELETETEXTURESPROC DeleteTextures;
+    PFNGLENABLEPROC Enable;
+    PFNGLDISABLEPROC Disable;
+    PFNGLISENABLEDPROC IsEnabled;
+    PFNGLBINDFRAMEBUFFERPROC BindFramebuffer;
+    PFNGLFRAMEBUFFERTEXTURE2DPROC FramebufferTexture2D;
+    PFNGLREADBUFFERPROC ReadBuffer;
+    PFNGLDRAWBUFFERPROC DrawBuffer;
+    PFNGLBLITFRAMEBUFFERPROC BlitFramebuffer;
+    PFNGLGETERRORPROC GetError;
+    PFNGLGETSTRINGPROC GetString;
+    PFNGLGETUNSIGNEDBYTEI_VEXTPROC GetUnsignedBytei_vEXT;
+    PFNGLCREATEMEMORYOBJECTSEXTPROC CreateMemoryObjectsEXT;
+    PFNGLMEMORYOBJECTPARAMETERIVEXTPROC MemoryObjectParameterivEXT;
+    PFNGLIMPORTMEMORYFDEXTPROC ImportMemoryFdEXT;
+    PFNGLTEXSTORAGEMEM2DEXTPROC TexStorageMem2DEXT;
+    PFNGLISMEMORYOBJECTEXTPROC IsMemoryObjectEXT;
+};
 
 #define P_EGL_HEIGHT 0x3056
 #define P_EGL_WIDTH 0x3057

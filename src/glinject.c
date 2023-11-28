@@ -31,10 +31,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <unistd.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include <GL/gl.h>
 
 static bool gl_seen = false;
 static bool vk_seen = false;
+static struct gl_funcs gl_f;
 static struct egl_funcs egl_f;
 static struct glx_funcs glx_f;
 static struct x11_funcs x11_f;
@@ -95,6 +95,7 @@ static struct gl_data data;
         return false; \
     } \
 
+#define GETGLPROCADDR(func) GETPROCADDR(gl, gl_f, func)
 #define GETEGLPROCADDR(func) GETPROCADDR(egl, egl_f, func)
 #define GETGLXPROCADDR(func) GETPROCADDR(glX, glx_f, func)
 
@@ -143,6 +144,7 @@ static bool gl_init_funcs(bool glx)
         GETGLXPROCADDR(BindTexImageEXT);
         GETGLXPROCADDR(QueryDrawable);
         GETGLXPROCADDR(ChooseVisual);
+        gl_f.GetProcAddress = glx_f.GetProcAddress;
         glx_f.valid = true;
 
         handle = dlopen("libX11.so.6", RTLD_LAZY);
@@ -188,8 +190,34 @@ static bool gl_init_funcs(bool glx)
         GETEGLPROCADDR(SwapBuffers);
         GETEGLPROCADDR(ExportDMABUFImageQueryMESA);
         GETEGLPROCADDR(ExportDMABUFImageMESA);
+        gl_f.GetProcAddress = egl_f.GetProcAddress;
         egl_f.valid = true;
     }
+
+    GETGLPROCADDR(GenFramebuffers);
+    GETGLPROCADDR(GenTextures);
+    GETGLPROCADDR(TexImage2D);
+    GETGLPROCADDR(TexParameteri);
+    GETGLPROCADDR(GetIntegerv);
+    GETGLPROCADDR(BindTexture);
+    GETGLPROCADDR(DeleteFramebuffers);
+    GETGLPROCADDR(DeleteTextures);
+    GETGLPROCADDR(Enable);
+    GETGLPROCADDR(Disable);
+    GETGLPROCADDR(IsEnabled);
+    GETGLPROCADDR(BindFramebuffer);
+    GETGLPROCADDR(FramebufferTexture2D);
+    GETGLPROCADDR(ReadBuffer);
+    GETGLPROCADDR(DrawBuffer);
+    GETGLPROCADDR(BlitFramebuffer);
+    GETGLPROCADDR(GetError);
+    GETGLPROCADDR(GetString);
+    GETGLPROCADDR(GetUnsignedBytei_vEXT);
+    GETGLPROCADDR(CreateMemoryObjectsEXT);
+    GETGLPROCADDR(MemoryObjectParameterivEXT);
+    GETGLPROCADDR(ImportMemoryFdEXT);
+    GETGLPROCADDR(TexStorageMem2DEXT);
+    GETGLPROCADDR(IsMemoryObjectEXT);
 
     data.valid = true;
 
@@ -249,7 +277,7 @@ static bool vulkan_init()
         return false;
     }
 
-    glGetUnsignedBytei_vEXT(0x9597, 0, data.device_uuid);
+    gl_f.GetUnsignedBytei_vEXT(0x9597, 0, data.device_uuid);
 
     const char *instance_extensions[] = {
         VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
@@ -390,7 +418,7 @@ static bool vulkan_shtex_init()
         return false;
     }
 
-    glGenFramebuffers(1, &data.fbo);
+    gl_f.GenFramebuffers(1, &data.fbo);
     if (data.fbo == 0) {
         hlog("Failed to initialize FBO");
         return false;
@@ -596,19 +624,19 @@ static bool vulkan_shtex_init()
     }
 
     GLuint glmem;
-    glCreateMemoryObjectsEXT(1, &glmem);
+    gl_f.CreateMemoryObjectsEXT(1, &glmem);
     GLint dedicated = GL_TRUE;
-    glMemoryObjectParameterivEXT(glmem, GL_DEDICATED_MEMORY_OBJECT_EXT, &dedicated);
-    glImportMemoryFdEXT(glmem, memi.allocationSize, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd);
+    gl_f.MemoryObjectParameterivEXT(glmem, GL_DEDICATED_MEMORY_OBJECT_EXT, &dedicated);
+    gl_f.ImportMemoryFdEXT(glmem, memi.allocationSize, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd);
 
-    glGenTextures(1, &data.texture);
-    glBindTexture(GL_TEXTURE_2D, data.texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_TILING_EXT, img_info.tiling == VK_IMAGE_TILING_LINEAR || linear ? GL_LINEAR_TILING_EXT : GL_OPTIMAL_TILING_EXT);
-    glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, data.width, data.height, glmem, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl_f.GenTextures(1, &data.texture);
+    gl_f.BindTexture(GL_TEXTURE_2D, data.texture);
+    gl_f.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_TILING_EXT, img_info.tiling == VK_IMAGE_TILING_LINEAR || linear ? GL_LINEAR_TILING_EXT : GL_OPTIMAL_TILING_EXT);
+    gl_f.TexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, data.width, data.height, glmem, 0);
+    gl_f.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl_f.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    if (!glIsMemoryObjectEXT(glmem) || glGetError() != GL_NO_ERROR) {
+    if (!gl_f.IsMemoryObjectEXT(glmem) || gl_f.GetError() != GL_NO_ERROR) {
         hlog("Vulkan: OpenGL import failed");
         return false;
     }
@@ -713,12 +741,12 @@ static void gl_free()
     }
 
     if (data.fbo) {
-        glDeleteFramebuffers(1, &data.fbo);
+        gl_f.DeleteFramebuffers(1, &data.fbo);
         data.fbo = 0;
     }
 
     if (data.texture) {
-        glDeleteTextures(1, &data.texture);
+        gl_f.DeleteTextures(1, &data.texture);
         data.texture = 0;
     }
 
@@ -741,14 +769,14 @@ static void gl_free()
 
 static void gl_copy_backbuffer(GLuint dst)
 {
-    glDisable(GL_FRAMEBUFFER_SRGB);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, data.fbo);
-    glBindTexture(GL_TEXTURE_2D, dst);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0);
-    glReadBuffer(GL_BACK);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
-    glBlitFramebuffer(0, 0, data.width, data.height, 0, 0, data.width, data.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    gl_f.Disable(GL_FRAMEBUFFER_SRGB);
+    gl_f.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    gl_f.BindFramebuffer(GL_DRAW_FRAMEBUFFER, data.fbo);
+    gl_f.BindTexture(GL_TEXTURE_2D, dst);
+    gl_f.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0);
+    gl_f.ReadBuffer(GL_BACK);
+    gl_f.DrawBuffer(GL_COLOR_ATTACHMENT0);
+    gl_f.BlitFramebuffer(0, 0, data.width, data.height, 0, 0, data.width, data.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 }
 
 static void gl_shtex_capture()
@@ -758,20 +786,20 @@ static void gl_shtex_capture()
     GLint last_draw_fbo;
     GLint last_tex;
 
-    last_srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &last_read_fbo);
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &last_draw_fbo);
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
+    last_srgb = gl_f.IsEnabled(GL_FRAMEBUFFER_SRGB);
+    gl_f.GetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &last_read_fbo);
+    gl_f.GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &last_draw_fbo);
+    gl_f.GetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
 
     gl_copy_backbuffer(data.texture);
 
-    glBindTexture(GL_TEXTURE_2D, last_tex);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, last_draw_fbo);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, last_read_fbo);
+    gl_f.BindTexture(GL_TEXTURE_2D, last_tex);
+    gl_f.BindFramebuffer(GL_DRAW_FRAMEBUFFER, last_draw_fbo);
+    gl_f.BindFramebuffer(GL_READ_FRAMEBUFFER, last_read_fbo);
     if (last_srgb) {
-        glEnable(GL_FRAMEBUFFER_SRGB);
+        gl_f.Enable(GL_FRAMEBUFFER_SRGB);
     } else {
-        glDisable(GL_FRAMEBUFFER_SRGB);
+        gl_f.Disable(GL_FRAMEBUFFER_SRGB);
     }
 }
 
@@ -783,13 +811,13 @@ static bool gl_shtex_init()
 
     if (data.glx) {
         // GLX on NVIDIA is all kinds of broken...
-        const char *vendor = (const char*)glGetString(GL_VENDOR);
+        const char *vendor = (const char*)gl_f.GetString(GL_VENDOR);
         if (strcmp(vendor, "NVIDIA Corporation") == 0) {
             return false;
         }
     }
 
-    glGenFramebuffers(1, &data.fbo);
+    gl_f.GenFramebuffers(1, &data.fbo);
     if (data.fbo == 0) {
         hlog("Failed to initialize FBO");
         return false;
@@ -797,11 +825,11 @@ static bool gl_shtex_init()
 
     hlog("Texture %s %ux%u", "GL_RGBA", data.width, data.height);
 
-    glGenTextures(1, &data.texture);
-    glBindTexture(GL_TEXTURE_2D, data.texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, data.width, data.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl_f.GenTextures(1, &data.texture);
+    gl_f.BindTexture(GL_TEXTURE_2D, data.texture);
+    gl_f.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, data.width, data.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    gl_f.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl_f.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     if (data.glx) {
         unsigned long root = P_DefaultRootWindow(data.display);
@@ -904,14 +932,14 @@ static bool gl_init(void *display, void *surface)
     }
 
     GLint last_tex;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
+    gl_f.GetIntegerv(GL_TEXTURE_BINDING_2D, &last_tex);
 
     bool init = gl_shtex_init();
     if (!init) {
         init = vulkan_shtex_init();
     }
 
-    glBindTexture(GL_TEXTURE_2D, last_tex);
+    gl_f.BindTexture(GL_TEXTURE_2D, last_tex);
 
     if (!init) {
         hlog("shtex init failed");
