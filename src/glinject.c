@@ -906,7 +906,7 @@ static bool gl_shtex_init()
 fail:
     data.nfd = 0;
     if (data.fbo) {
-        glDeleteFramebuffers(1, &data.fbo);
+        gl_f.DeleteFramebuffers(1, &data.fbo);
         data.fbo = 0;
     }
     if (data.xpixmap) {
