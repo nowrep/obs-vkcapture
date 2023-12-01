@@ -118,6 +118,7 @@ struct vk_data {
     struct vk_obj_node node;
 
     VkDevice device;
+    VkDriverId driver_id;
     uint8_t device_uuid[16];
 
     bool valid;
@@ -546,6 +547,15 @@ static void remove_free_inst_data(VkInstance inst,
 /* ======================================================================== */
 /* capture                                                                  */
 
+static bool allow_modifier(struct vk_data *data, uint64_t modifier)
+{
+    /* DCC modifiers doesn't work when importing on radeonsi with amdvlk/amdpro drivers */
+    if (data->driver_id == VK_DRIVER_ID_AMD_OPEN_SOURCE || data->driver_id == VK_DRIVER_ID_AMD_PROPRIETARY) {
+        return !IS_AMD_FMT_MOD(modifier) || !AMD_FMT_MOD_GET(DCC, modifier);
+    }
+    return true;
+}
+
 static const struct {
     int32_t drm;
     VkFormat vk;
@@ -656,6 +666,10 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
             if (linear && modifier_props[i].drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
                 continue;
             }
+            if (!allow_modifier(data, modifier_props[i].drmFormatModifier)) {
+                continue;
+            }
+
             VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {};
             mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
             mod_info.drmFormatModifier = modifier_props[i].drmFormatModifier;
@@ -1424,8 +1438,9 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
         VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
         VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
         VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+        VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME,
     };
-    static uint32_t req_extensions_count = 10;
+    static uint32_t req_extensions_count = 11;
 
     int new_count = info->enabledExtensionCount + req_extensions_count;
     const char **exts = (const char**)malloc(sizeof(char*) * new_count);
@@ -1649,14 +1664,19 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     init_obj_list(&data->swaps);
     data->cur_swap = NULL;
 
+    VkPhysicalDeviceDriverProperties propsDriver = {};
+    propsDriver.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+
     VkPhysicalDeviceIDProperties propsID = {};
     propsID.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+    propsID.pNext = &propsDriver;
 
     VkPhysicalDeviceProperties2 props = {};
     props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     props.pNext = &propsID;
     ifuncs->GetPhysicalDeviceProperties2KHR(phy_device, &props);
 
+    data->driver_id = propsDriver.driverID;
     memcpy(data->device_uuid, propsID.deviceUUID, 16);
 
     data->valid = true;

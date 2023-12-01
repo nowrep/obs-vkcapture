@@ -40,6 +40,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define fourcc_mod_code(vendor, val) ((((uint64_t)vendor) << 56) | ((val) & 0x00ffffffffffffffULL))
 #define DRM_FORMAT_MOD_INVALID fourcc_mod_code(0, ((1ULL << 56) - 1))
 #define DRM_FORMAT_MOD_LINEAR fourcc_mod_code(0, 0)
+#define DRM_FORMAT_MOD_VENDOR_AMD 0x02
+#define AMD_FMT_MOD_DCC_SHIFT 13
+#define AMD_FMT_MOD_DCC_MASK 0x1
+#define IS_AMD_FMT_MOD(val) (((val) >> 56) == DRM_FORMAT_MOD_VENDOR_AMD)
+#define AMD_FMT_MOD_GET(field, value) (((value) >> AMD_FMT_MOD_##field##_SHIFT) & AMD_FMT_MOD_##field##_MASK)
 #endif
 
 struct capture_client_data {
