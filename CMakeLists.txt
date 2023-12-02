@@ -115,11 +115,10 @@ endif()
 set(GL_SOURCES src/dlsym.c src/elfhacks.c src/glinject.c src/capture.c)
 add_library(obs_glcapture MODULE ${GL_SOURCES})
 set_target_properties(obs_glcapture PROPERTIES LINK_FLAGS "-Wl,--version-script=\"${CMAKE_CURRENT_SOURCE_DIR}/src/glinject.version\"")
-target_link_libraries(obs_glcapture ${CMAKE_DL_LIBS})
+target_link_libraries(obs_glcapture ${CMAKE_DL_LIBS} OpenGL::GL)
 target_include_directories(obs_glcapture PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<TARGET_PROPERTY:Vulkan::Vulkan,INTERFACE_INCLUDE_DIRECTORIES>
-    $<TARGET_PROPERTY:OpenGL::GL,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 configure_file(plugin-macros.h.in ${CMAKE_CURRENT_BINARY_DIR}/plugin-macros.h @ONLY)
