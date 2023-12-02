@@ -132,7 +132,11 @@ static bool gl_init_funcs(bool glx)
     data.glx = glx;
 
     if (glx) {
-        void *handle = NULL;
+        void *handle = dlopen("libGLX.so.0", RTLD_LAZY);
+        if (!handle) {
+            hlog("Failed to open libGLX.so.0");
+            return false;
+        }
         GETGLXADDR(GetProcAddress);
         GETGLXADDR(GetProcAddressARB);
         GETGLXPROCADDR(DestroyContext);
