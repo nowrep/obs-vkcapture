@@ -27,4 +27,5 @@ Paste OBS log here.
 **Game log:**
 ```
 Paste game terminal output here.
+Make sure to set OBS_VKCAPTURE_QUIET=0 environment variable.
 ```

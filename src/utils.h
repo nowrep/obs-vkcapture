@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <time.h>
 
 static inline int os_dupfd_cloexec(int fd)
@@ -44,4 +45,14 @@ static inline int64_t os_time_get_nano(void)
     return tv.tv_nsec + tv.tv_sec * INT64_C(1000000000);
 }
 
-#define hlog(msg, ...) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)
+static bool hlog_quiet(void)
+{
+    static int quiet = -1;
+    if (quiet == -1) {
+        const char *q = getenv("OBS_VKCAPTURE_QUIET");
+        quiet = q && atoi(q) == 1;
+    }
+    return quiet;
+}
+
+#define hlog(msg, ...) if (!hlog_quiet()) fprintf(stderr, "[obs-vkcapture] " msg "\n", ##__VA_ARGS__)
