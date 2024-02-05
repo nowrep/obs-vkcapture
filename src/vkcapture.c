@@ -538,6 +538,10 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     pthread_mutex_lock(&server.mutex);
     vkcapture_client_t *client = find_client_by_id(ctx->client_id);
+    if (!client) {
+        pthread_mutex_unlock(&server.mutex);
+        return;
+    }
     void *memory = client->map_memory;
     int stride = client->tdata.strides[0];
     int fd = client->buf_fds[0];
