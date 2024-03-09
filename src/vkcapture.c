@@ -797,7 +797,9 @@ static void *server_thread_run(void *data)
 
         if (server_has_event_on_fd(server.eventfd)) {
             uint64_t q;
-            read(server.eventfd, &q, sizeof(q));
+            if (read(server.eventfd, &q, sizeof(q)) != sizeof(q)) {
+                blog(LOG_ERROR, "Failed to read from eventfd %s", strerror(errno));
+            }
             if (server.quit) {
                 break;
             }
