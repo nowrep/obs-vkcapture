@@ -588,6 +588,17 @@ static int32_t vk_format_to_drm(VkFormat vk)
     return -1;
 }
 
+static uint32_t vk_color_space_to_obs(VkColorSpaceKHR vk)
+{
+    switch (vk) {
+    case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+        return 2; // GS_CS_709_EXTENDED
+    case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+    default:
+        return 0; // GS_CS_SRGB
+    }
+}
+
 static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
         struct vk_swap_data *swap)
 {
@@ -889,7 +900,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
         vk_format_to_drm(swap->export_format),
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
-        swap->winid, /*flip*/false, swap->color_space,
+        swap->winid, /*flip*/false, vk_color_space_to_obs(swap->color_space),
         swap->dmabuf_nfd, swap->dmabuf_fds);
 
     hlog("------------------ vulkan capture started ------------------");

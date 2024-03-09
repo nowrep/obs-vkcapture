@@ -560,12 +560,22 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
         ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
     }
 
+    const enum gs_color_space color_space = gs_get_color_space();
+    const char *tech_name = "Draw";
+    float multiplier = 1.f;
+
+    if (color_space == GS_CS_709_EXTENDED) {
+        tech_name = "DrawPQ";
+        multiplier = 10000.f / obs_get_video_sdr_white_level();
+    }
+
     effect = obs_get_base_effect(ctx->allow_transparency ? OBS_EFFECT_DEFAULT : OBS_EFFECT_OPAQUE);
 
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     gs_effect_set_texture(image, ctx->texture);
 
-    while (gs_effect_loop(effect, "Draw")) {
+    while (gs_effect_loop(effect, tech_name)) {
+        gs_effect_set_float(gs_effect_get_param_by_name(effect, "multiplier"), multiplier);
         gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
         if (ctx->allow_transparency && ctx->show_cursor) {
             cursor_render(ctx);
@@ -574,7 +584,14 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     if (!ctx->allow_transparency && ctx->show_cursor) {
         effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-        while (gs_effect_loop(effect, "Draw")) {
+        tech_name = "Draw";
+        multiplier = 1.f;
+        if (color_space == GS_CS_709_SCRGB) {
+            tech_name = "DrawMultiply";
+            multiplier = obs_get_video_sdr_white_level() / 80.f;
+        }
+        while (gs_effect_loop(effect, tech_name)) {
+            gs_effect_set_float(gs_effect_get_param_by_name(effect, "multiplier"), multiplier);
             cursor_render(ctx);
         }
     }
@@ -650,6 +667,17 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
     return props;
 }
 
+enum gs_color_space vkcapture_get_color_space(void *data, size_t count, const enum gs_color_space *preferred_spaces)
+{
+    vkcapture_source_t *ctx = data;
+
+    enum gs_color_space color_space = ctx->tdata.color_space;
+
+    UNUSED_PARAMETER(count);
+    UNUSED_PARAMETER(preferred_spaces);
+    return color_space;
+}
+
 static struct obs_source_info vkcapture_input = {
     .id = "vkcapture-source",
     .type = OBS_SOURCE_TYPE_INPUT,
@@ -665,6 +693,7 @@ static struct obs_source_info vkcapture_input = {
     .get_defaults = vkcapture_source_get_defaults,
     .get_properties = vkcapture_source_get_properties,
     .icon_type = OBS_ICON_TYPE_GAME_CAPTURE,
+    .video_get_color_space = vkcapture_get_color_space,
 };
 
 static bool server_wakeup()
