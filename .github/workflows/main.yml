@@ -18,8 +18,9 @@ jobs:
 
     - name: Dependencies
       run: |
+        sudo add-apt-repository ppa:obsproject/obs-studio
         sudo apt update
-        sudo apt install libvulkan-dev libobs-dev libgl-dev libegl-dev libx11-dev libxcb1-dev libxcb-xfixes0-dev libwayland-dev libwayland-bin
+        sudo apt install libvulkan-dev obs-studio libgl-dev libegl-dev libx11-dev libxcb1-dev libxcb-xfixes0-dev libwayland-dev libwayland-bin
 
     - name: Configure
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
