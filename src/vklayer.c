@@ -590,6 +590,13 @@ static int32_t vk_format_to_drm(VkFormat vk)
 
 static uint32_t vk_color_space_to_obs(VkColorSpaceKHR vk)
 {
+    const char *force = getenv("OBS_VKCAPTURE_COLOR_SPACE");
+    if (force) {
+        int value = atoi(force);
+        if (value >= 0 && value < 3) {
+            return value;
+        }
+    }
     switch (vk) {
     case VK_COLOR_SPACE_HDR10_ST2084_EXT:
         return 2; // GS_CS_709_EXTENDED
