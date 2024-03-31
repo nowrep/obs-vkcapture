@@ -96,6 +96,7 @@ typedef struct {
 #endif
     bool show_cursor;
     bool allow_transparency;
+    bool force_hdr;
     bool window_match;
     bool window_exclude;
     const char *window;
@@ -323,6 +324,7 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
 
     ctx->show_cursor = obs_data_get_bool(settings, "show_cursor");
     ctx->allow_transparency = obs_data_get_bool(settings, "allow_transparency");
+    ctx->force_hdr = obs_data_get_bool(settings, "force_hdr");
 
     ctx->window_match = false;
     ctx->window_exclude = false;
@@ -618,6 +620,7 @@ static void vkcapture_source_get_defaults(obs_data_t *defaults)
 {
     obs_data_set_default_bool(defaults, "show_cursor", true);
     obs_data_set_default_bool(defaults, "allow_transparency", false);
+    obs_data_set_default_bool(defaults, "force_hdr", false);
 }
 
 static obs_properties_t *vkcapture_source_get_properties(void *data)
@@ -663,6 +666,7 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
     }
 
     obs_properties_add_bool(props, "allow_transparency", obs_module_text("AllowTransparency"));
+    obs_properties_add_bool(props, "force_hdr", obs_module_text("ForceHDR"));
 
     return props;
 }
@@ -672,6 +676,10 @@ enum gs_color_space vkcapture_get_color_space(void *data, size_t count, const en
     vkcapture_source_t *ctx = data;
 
     enum gs_color_space color_space = ctx->tdata.color_space;
+
+    if (ctx->force_hdr) {
+        color_space = GS_CS_709_EXTENDED;
+    }
 
     UNUSED_PARAMETER(count);
     UNUSED_PARAMETER(preferred_spaces);
