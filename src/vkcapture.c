@@ -111,6 +111,7 @@ typedef struct {
 } vkcapture_source_t;
 
 static bool server_wakeup();
+static void vkcapture_get_hooked(void *data, calldata_t *cd);
 
 static const char *import_attempt_str(enum vkcapture_import_attempt attempt)
 {
@@ -353,6 +354,12 @@ static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
 
     cursor_create(ctx);
 
+	proc_handler_t *ph = obs_source_get_proc_handler(source);
+	proc_handler_add(
+		ph,
+		"void get_hooked(out bool hooked, out string executable)",
+		vkcapture_get_hooked, ctx);
+
     UNUSED_PARAMETER(settings);
     return ctx;
 }
@@ -386,6 +393,25 @@ static vkcapture_client_t *find_client_by_id(int id)
         }
     }
     return client;
+}
+
+static void vkcapture_get_hooked(void *data, calldata_t *cd)
+{
+	vkcapture_source_t *ctx = data;
+
+	if(ctx && ctx->client_id) {
+		pthread_mutex_lock(&server.mutex);
+    	vkcapture_client_t *client = find_client_by_id(ctx->client_id);
+
+        calldata_set_bool(cd, "hooked", !!client);
+        calldata_set_string(cd, "executable", client ? client->cdata.exe: "");
+
+		pthread_mutex_unlock(&server.mutex);
+        return;
+	}
+
+	calldata_set_bool(cd, "hooked", false);
+	calldata_set_string(cd, "executable", "");
 }
 
 static void fill_capture_control_data(struct capture_control_data *msg, vkcapture_client_t *client)
