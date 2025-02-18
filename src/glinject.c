@@ -140,6 +140,7 @@ static bool gl_init_funcs(bool glx)
         GETGLXADDR(GetProcAddress);
         GETGLXADDR(GetProcAddressARB);
         GETGLXPROCADDR(DestroyContext);
+        GETGLXPROCADDR(CreateWindow);
         GETGLXPROCADDR(SwapBuffers);
         GETGLXPROCADDR(SwapBuffersMscOML);
         GETGLXPROCADDR(CreatePixmap);
@@ -1072,6 +1073,7 @@ void *eglCreateWindowSurface(void *display, void *config, void *win, const intpt
 void *glXGetProcAddress(const char *procName);
 void *glXGetProcAddressARB(const char *procName);
 void glXDestroyContext(void *display, void *context);
+bool glXCreateWindow(void *display, void *config, unsigned long win, const int *attribList);
 void glXSwapBuffers(void *display, void *surface);
 int64_t glXSwapBuffersMscOML(void *display, void *drawable, int64_t target_msc, int64_t divisor, int64_t remainder);
 
@@ -1084,7 +1086,8 @@ static struct {
     ADD_HOOK(glXGetProcAddressARB),
     ADD_HOOK(glXSwapBuffers),
     ADD_HOOK(glXSwapBuffersMscOML),
-    ADD_HOOK(glXDestroyContext)
+    ADD_HOOK(glXDestroyContext),
+    ADD_HOOK(glXCreateWindow)
 #undef ADD_HOOK
 };
 
@@ -1125,6 +1128,17 @@ void glXDestroyContext(void *display, void *context)
     gl_free();
 
     glx_f.DestroyContext(display, context);
+}
+
+bool glXCreateWindow(void *display, void *config, unsigned long win, const int *attribList)
+{
+    if (!gl_init_funcs(/*glx*/true)) {
+        return false;
+    }
+
+    gl_free();
+
+    return glx_f.CreateWindow(display, config, win, attribList);
 }
 
 void glXSwapBuffers(void *display, void *drawable)

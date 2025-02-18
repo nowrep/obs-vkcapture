@@ -94,6 +94,7 @@ struct glx_funcs {
     void *(*GetProcAddress)(const char*);
     void *(*GetProcAddressARB)(const char*);
     void (*DestroyContext)(void *display, void *context);
+    bool (*CreateWindow)(void *display, void *config, unsigned long win, const int *attribList);
     void (*SwapBuffers)(void *display, void *drawable);
     int64_t (*SwapBuffersMscOML)(void *display, void *drawable, int64_t target_msc, int64_t divisor, int64_t remainder);
     void *(*CreatePixmap)(void *display, void *config, unsigned long pixmap, const int *attribList);
