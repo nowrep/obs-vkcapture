@@ -32,7 +32,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <stdlib.h>
 #include <inttypes.h>
 
-static bool gl_seen = false;
+static bool glx_seen = false;
+static bool egl_seen = false;
 static bool vk_seen = false;
 static struct gl_funcs gl_f;
 static struct egl_funcs egl_f;
@@ -108,8 +109,11 @@ static struct gl_data data;
 
 static bool gl_init_funcs(bool glx)
 {
-    if (gl_seen) {
-        return glx ? glx_f.valid && x11_f.valid : egl_f.valid;
+    if (glx && glx_seen) {
+        return glx_f.valid && x11_f.valid;
+    }
+    if (!glx && egl_seen) {
+        return egl_f.valid;
     }
 
     hlog("Init %s %s (%s)", glx ? "GLX" : "EGL", PLUGIN_VERSION,
@@ -119,11 +123,6 @@ static bool gl_init_funcs(bool glx)
         "32bit");
 #endif
 
-    gl_seen = true;
-    egl_f.valid = false;
-    glx_f.valid = false;
-    x11_f.valid = false;
-
     vkcapture_glvulkan = getenv("OBS_VKCAPTURE_GLVULKAN");
 
     capture_init();
@@ -132,6 +131,9 @@ static bool gl_init_funcs(bool glx)
     data.glx = glx;
 
     if (glx) {
+        glx_seen = true;
+        glx_f.valid = false;
+        x11_f.valid = false;
         void *handle = dlopen("libGLX.so.0", RTLD_LAZY);
         if (!handle) {
             hlog("Failed to open libGLX.so.0");
@@ -180,6 +182,8 @@ static bool gl_init_funcs(bool glx)
         GETXADDR(xcb_dri3_buffers_from_pixmap_offsets);
         x11_f.valid = true;
     } else {
+        egl_seen = true;
+        egl_f.valid = false;
         void *handle = dlopen("libEGL.so.1", RTLD_LAZY);
         if (!handle) {
             hlog("Failed to open libEGL.so.1");
