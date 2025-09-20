@@ -49,9 +49,21 @@ static struct wl_display *wl_display = NULL;
 static wl_cursor_t *wlcursor = NULL;
 #endif
 
+#include <GL/glcorearb.h>
+#include <GL/glext.h>
 #include <EGL/egl.h>
 static uint8_t gl_device_uuid[16];
-void (*p_glGetUnsignedBytei_vEXT)(unsigned int target, unsigned int index, unsigned char *data) = NULL;
+static PFNGLGETINTEGERVPROC p_glGetIntegerv;
+static PFNGLGETSTRINGIPROC p_glGetStringi;
+static PFNGLGETUNSIGNEDBYTEI_VEXTPROC p_glGetUnsignedBytei_vEXT;
+static PFNGLISSEMAPHOREEXTPROC p_glIsSemaphoreEXT;
+static PFNGLWAITSEMAPHOREEXTPROC p_glWaitSemaphoreEXT;
+static PFNGLSIGNALSEMAPHOREEXTPROC p_glSignalSemaphoreEXT;
+static PFNGLDELETESEMAPHORESEXTPROC p_glDeleteSemaphoresEXT;
+static PFNGLSEMAPHOREPARAMETERUI64VEXTPROC p_glSemaphoreParameterui64vEXT;
+static PFNGLIMPORTSEMAPHOREFDEXTPROC p_glImportSemaphoreFdEXT;
+static PFNGLCREATESEMAPHORESNVPROC p_glCreateSemaphoresNV;
+static PFNGLSEMAPHOREPARAMETERIVNVPROC p_glSemaphoreParameterivNV;
 
 enum vkcapture_import_attempt {
     IMPORT_DEFAULT = 0,
@@ -66,7 +78,8 @@ typedef struct {
     int sockfd;
     int activated;
     int buf_id;
-    int buf_fds[4];
+    int buf_fds[5];
+    int num_planes;
     int import_failures;
     size_t map_size;
     void *map_memory;
@@ -74,6 +87,7 @@ typedef struct {
     bool unresponsive;
     struct capture_client_data cdata;
     struct capture_texture_data tdata;
+    struct capture_sync_data sdata;
 } vkcapture_client_t;
 
 static struct {
@@ -90,6 +104,9 @@ static int source_instances = 0;
 typedef struct {
     obs_source_t *source;
     gs_texture_t *texture;
+    gs_texture_t *texture_copy;
+    GLuint semaphore;
+    uint64_t sem_value;
 #if HAVE_X11_XCB
     xcb_xcursor_t *xcursor;
     uint32_t root_winid;
@@ -103,8 +120,8 @@ typedef struct {
 
     int buf_id;
     int client_id;
+    int num_planes;
     struct capture_texture_data tdata;
-
 } vkcapture_source_t;
 
 static bool server_wakeup();
@@ -299,8 +316,16 @@ static void destroy_texture(vkcapture_source_t *ctx)
 
     obs_enter_graphics();
     gs_texture_destroy(ctx->texture);
+    if (ctx->texture_copy) {
+        gs_texture_destroy(ctx->texture_copy);
+    }
+    if (ctx->semaphore) {
+        p_glDeleteSemaphoresEXT(1, &ctx->semaphore);
+    }
     obs_leave_graphics();
     ctx->texture = NULL;
+    ctx->semaphore = 0;
+    ctx->sem_value = 0;
 
     ctx->buf_id = 0;
     memset(&ctx->tdata, 0, sizeof(ctx->tdata));
@@ -386,15 +411,54 @@ static vkcapture_client_t *find_client_by_id(int id)
     return client;
 }
 
+static bool gl_extension_supported(const char *name)
+{
+    if (!p_glGetIntegerv || !p_glGetStringi) {
+        return false;
+    }
+    GLint num_ext;
+    p_glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
+    for (GLint i = 0; i < num_ext; i++) {
+        const char *ext = (char *)p_glGetStringi(GL_EXTENSIONS, i);
+        if (ext && !strcmp(ext, name))
+            return true;
+    }
+    return false;
+}
+
 static void fill_capture_control_data(struct capture_control_data *msg, vkcapture_client_t *client)
 {
-    if (!p_glGetUnsignedBytei_vEXT) {
+    static bool enable_sem = false;
+
+    if (!p_glGetIntegerv) {
         obs_enter_graphics();
-        p_glGetUnsignedBytei_vEXT = (typeof(p_glGetUnsignedBytei_vEXT))
-            eglGetProcAddress("glGetUnsignedBytei_vEXT");
-        if (p_glGetUnsignedBytei_vEXT) {
-            p_glGetUnsignedBytei_vEXT(0x9597, 0, gl_device_uuid);
+#define GETPROC(x) p_##x = (typeof(p_##x))eglGetProcAddress(#x);
+        GETPROC(glGetIntegerv);
+        GETPROC(glGetStringi);
+        if (gl_extension_supported("GL_EXT_memory_object")) {
+            GETPROC(glGetUnsignedBytei_vEXT);
+            if (p_glGetUnsignedBytei_vEXT) {
+                p_glGetUnsignedBytei_vEXT(0x9597, 0, gl_device_uuid);
+            }
         }
+        if (gl_extension_supported("GL_EXT_semaphore") &&
+            gl_extension_supported("GL_EXT_semaphore_fd") &&
+            gl_extension_supported("GL_NV_timeline_semaphore")) {
+            GETPROC(glGetUnsignedBytei_vEXT);
+            GETPROC(glIsSemaphoreEXT);
+            GETPROC(glWaitSemaphoreEXT);
+            GETPROC(glSignalSemaphoreEXT);
+            GETPROC(glDeleteSemaphoresEXT);
+            GETPROC(glSemaphoreParameterui64vEXT);
+            GETPROC(glImportSemaphoreFdEXT);
+            GETPROC(glCreateSemaphoresNV);
+            GETPROC(glSemaphoreParameterivNV);
+
+            enable_sem = p_glGetUnsignedBytei_vEXT && p_glIsSemaphoreEXT && p_glWaitSemaphoreEXT &&
+                         p_glSignalSemaphoreEXT && p_glDeleteSemaphoresEXT && p_glSemaphoreParameterui64vEXT &&
+                         p_glImportSemaphoreFdEXT && p_glCreateSemaphoresNV && p_glSemaphoreParameterivNV;
+        }
+#undef GETPROC
         obs_leave_graphics();
     }
 
@@ -402,6 +466,7 @@ static void fill_capture_control_data(struct capture_control_data *msg, vkcaptur
     msg->linear = !!(client->import_failures == IMPORT_LINEAR
         || client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
     msg->map_host = !!(client->import_failures == IMPORT_LINEAR_HOST_MAPPED);
+    msg->enable_sem = enable_sem;
     memcpy(msg->device_uuid, gl_device_uuid, 16);
 }
 
@@ -417,7 +482,7 @@ static void activate_client(vkcapture_source_t *ctx, vkcapture_client_t *client,
     }
     fill_capture_control_data(&msg, client);
     client->buf_id = 0;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         if (client->buf_fds[i] >= 0) {
             close(client->buf_fds[i]);
             client->buf_fds[i] = -1;
@@ -449,6 +514,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
         } else if (ctx->buf_id != client->buf_id) {
             destroy_texture(ctx);
             memcpy(&ctx->tdata, &client->tdata, sizeof(client->tdata));
+            ctx->num_planes = client->num_planes;
 
             blog(LOG_INFO, "Creating texture from dmabuf %dx%d modifier:%" PRIu64,
                     ctx->tdata.width, ctx->tdata.height, ctx->tdata.modifier);
@@ -456,7 +522,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             uint32_t strides[4];
             uint32_t offsets[4];
             uint64_t modifiers[4];
-            for (uint8_t i = 0; i < ctx->tdata.nfd; ++i) {
+            for (uint8_t i = 0; i < ctx->num_planes; ++i) {
                 strides[i] = ctx->tdata.strides[i];
                 offsets[i] = ctx->tdata.offsets[i];
                 modifiers[i] = ctx->tdata.modifier;
@@ -479,7 +545,7 @@ static void vkcapture_source_video_tick(void *data, float seconds)
             } else {
                 obs_enter_graphics();
                 ctx->texture = gs_texture_create_from_dmabuf(ctx->tdata.width, ctx->tdata.height,
-                    ctx->tdata.format, drm_format_to_gs(ctx->tdata.format), ctx->tdata.nfd, client->buf_fds,
+                    ctx->tdata.format, drm_format_to_gs(ctx->tdata.format), ctx->num_planes, client->buf_fds,
                     strides, offsets, ctx->tdata.modifier != DRM_FORMAT_MOD_INVALID ? modifiers : NULL);
                 obs_leave_graphics();
             }
@@ -500,6 +566,30 @@ static void vkcapture_source_video_tick(void *data, float seconds)
                     blog(LOG_ERROR, "Could not create texture from dmabuf source");
                 }
             }
+
+            if (ctx->tdata.sem && ctx->texture) {
+                obs_enter_graphics();
+                int sem_fd = fcntl(client->buf_fds[ctx->tdata.sem], F_DUPFD_CLOEXEC, 5);
+                p_glCreateSemaphoresNV(1, &ctx->semaphore);
+                GLint type = GL_SEMAPHORE_TYPE_TIMELINE_NV;
+                p_glSemaphoreParameterivNV(ctx->semaphore, GL_SEMAPHORE_TYPE_NV, &type);
+                p_glImportSemaphoreFdEXT(ctx->semaphore, GL_HANDLE_TYPE_OPAQUE_FD_EXT, sem_fd);
+                if (!p_glIsSemaphoreEXT(ctx->semaphore)) {
+                    blog(LOG_ERROR, "Failed to import semaphore");
+                    p_glDeleteSemaphoresEXT(1, &ctx->semaphore);
+                    close(sem_fd);
+                    ctx->semaphore = 0;
+                }
+                ctx->texture_copy = gs_texture_create(ctx->tdata.width, ctx->tdata.height,
+                    drm_format_to_gs(ctx->tdata.format), 1, NULL, GS_RENDER_TARGET);
+                if (!ctx->texture_copy) {
+                    blog(LOG_ERROR, "Failed to create texture copy");
+                }
+                obs_leave_graphics();
+            }
+
+            blog(LOG_INFO, "Sync %s", ctx->semaphore && ctx->texture_copy ? "enabled" : "disabled");
+
             ctx->buf_id = client->buf_id;
             client->timeout = 0;
         } else if (client != find_matching_client(ctx)) {
@@ -547,7 +637,40 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
     void *memory = client->map_memory;
     int stride = client->tdata.strides[0];
     int fd = client->buf_fds[0];
+    uint64_t sem_value = client->sdata.value;
+    bool copy_texture = client->sdata.session == ctx->tdata.session && ctx->semaphore && sem_value > ctx->sem_value;
     pthread_mutex_unlock(&server.mutex);
+
+    if (ctx->texture_copy && copy_texture) {
+        GLuint64 value = sem_value;
+        const GLenum layout = GL_LAYOUT_GENERAL_EXT;
+        p_glSemaphoreParameterui64vEXT(ctx->semaphore, GL_TIMELINE_SEMAPHORE_VALUE_NV, &value);
+        p_glWaitSemaphoreEXT(ctx->semaphore, 0, NULL, 1, gs_texture_get_obj(ctx->texture), &layout);
+
+        gs_copy_texture(ctx->texture_copy, ctx->texture);
+        value++;
+
+        p_glSemaphoreParameterui64vEXT(ctx->semaphore, GL_TIMELINE_SEMAPHORE_VALUE_NV, &value);
+        p_glSignalSemaphoreEXT(ctx->semaphore, 0, NULL, 1, gs_texture_get_obj(ctx->texture), &layout);
+
+        struct {
+            struct capture_control_data control;
+            struct capture_sync_data sync;
+        } msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.control.ex = 1;
+        msg.sync.type = CAPTURE_SYNC_DATA_TYPE;
+        msg.sync.session = ctx->tdata.session;
+        msg.sync.value = value;
+        ssize_t ret = write(client->sockfd, &msg, sizeof(msg));
+        if (ret != sizeof(msg)) {
+            blog(LOG_WARNING, "Socket write error: %s", strerror(errno));
+        }
+
+        ctx->sem_value = sem_value;
+    }
+
+    gs_texture_t *texture = ctx->texture_copy ? ctx->texture_copy : ctx->texture;
 
     if (memory) {
         struct dma_buf_sync sync;
@@ -579,13 +702,13 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
 
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
     if (linear_srgb)
-        gs_effect_set_texture_srgb(image, ctx->texture);
+        gs_effect_set_texture_srgb(image, texture);
     else
-        gs_effect_set_texture(image, ctx->texture);
+        gs_effect_set_texture(image, texture);
 
     while (gs_effect_loop(effect, tech_name)) {
         gs_effect_set_float(gs_effect_get_param_by_name(effect, "multiplier"), multiplier);
-        gs_draw_sprite(ctx->texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
+        gs_draw_sprite(texture, ctx->tdata.flip ? GS_FLIP_V : 0, 0, 0);
         if (ctx->allow_transparency && ctx->show_cursor) {
             cursor_render(ctx);
         }
@@ -763,7 +886,7 @@ static void server_cleanup_client(vkcapture_client_t *client)
         client->map_memory = NULL;
     }
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         if (client->buf_fds[i] >= 0) {
             close(client->buf_fds[i]);
             client->buf_fds[i] = -1;
@@ -865,7 +988,7 @@ static void *server_thread_run(void *data)
             msg.msg_iov = &io;
             msg.msg_iovlen = 1;
 
-            char cmsg_buf[CMSG_SPACE(sizeof(int)) * 4];
+            char cmsg_buf[CMSG_SPACE(sizeof(int)) * 5];
             msg.msg_control = cmsg_buf;
             msg.msg_controllen = sizeof(cmsg_buf);
 
@@ -885,7 +1008,7 @@ static void *server_thread_run(void *data)
                 }
 
                 if (buf[0] == CAPTURE_CLIENT_DATA_TYPE) {
-                    if (io.iov_len != CAPTURE_CLIENT_DATA_SIZE) {
+                    if (io.iov_len < CAPTURE_CLIENT_DATA_SIZE) {
                         server_cleanup_client(client);
                         break;
                     }
@@ -906,12 +1029,12 @@ static void *server_thread_run(void *data)
 
                     const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
 
-                    int buf_fds[4] = {-1, -1, -1, -1};
+                    int buf_fds[5] = {-1, -1, -1, -1, -1};
                     for (size_t i = 0; i < nfd; ++i) {
                         buf_fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
                     }
 
-                    if (io.iov_len != CAPTURE_TEXTURE_DATA_SIZE || client->tdata.nfd != nfd) {
+                    if (io.iov_len < CAPTURE_TEXTURE_DATA_SIZE || client->tdata.nfd != nfd) {
                         for (size_t i = 0; i < nfd; ++i) {
                             close(buf_fds[i]);
                         }
@@ -920,13 +1043,22 @@ static void *server_thread_run(void *data)
                     }
 
                     pthread_mutex_lock(&server.mutex);
-                    for (int i = 0; i < 4; ++i) {
+                    for (int i = 0; i < 5; ++i) {
                         if (client->buf_fds[i] >= 0) {
                             close(client->buf_fds[i]);
                         }
                         client->buf_fds[i] = buf_fds[i];
                     }
                     client->buf_id = ++bufid;
+                    client->num_planes = client->tdata.sem ? client->tdata.sem : client->tdata.nfd;
+                    pthread_mutex_unlock(&server.mutex);
+                } else if (buf[0] == CAPTURE_SYNC_DATA_TYPE) {
+                    if (io.iov_len < CAPTURE_SYNC_DATA_SIZE) {
+                        server_cleanup_client(client);
+                        break;
+                    }
+                    pthread_mutex_lock(&server.mutex);
+                    memcpy(&client->sdata, buf, CAPTURE_SYNC_DATA_SIZE);
                     pthread_mutex_unlock(&server.mutex);
                 }
             }

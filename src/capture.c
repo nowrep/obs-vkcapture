@@ -38,6 +38,10 @@ static struct {
     bool map_host;
     bool need_reinit;
     uint8_t device_uuid[16];
+    bool enable_sem;
+    uint32_t session;
+    uint64_t wait_value;
+    uint64_t signal_value;
 } data;
 
 static bool get_wine_exe(char *buf, size_t bufsize)
@@ -117,12 +121,14 @@ void capture_init()
 
 void capture_update_socket()
 {
-    static int64_t last_check = 0;
-    const int64_t now = os_time_get_nano();
-    if (now - last_check < 1000000000) {
-        return;
+    if (!data.capturing) {
+        static int64_t last_check = 0;
+        const int64_t now = os_time_get_nano();
+        if (now - last_check < 1000000000) {
+            return;
+        }
+        last_check = now;
     }
-    last_check = now;
 
     if (data.connfd < 0 && !capture_try_connect()) {
         return;
@@ -131,18 +137,32 @@ void capture_update_socket()
     struct capture_control_data control;
     ssize_t n = recv(data.connfd, &control, sizeof(control), 0);
     if (n == sizeof(control)) {
-        const bool old_no_modifiers = data.no_modifiers;
-        const bool old_linear = data.linear;
-        const bool old_map_host = data.map_host;
-        data.accepted = control.capturing == 1;
-        data.no_modifiers = control.no_modifiers == 1;
-        data.linear = control.linear == 1;
-        data.map_host = control.map_host == 1;
-        memcpy(data.device_uuid, control.device_uuid, 16);
-        if (data.capturing && (old_no_modifiers != data.no_modifiers
-            || old_linear != data.linear
-            || old_map_host != data.map_host)) {
-            data.need_reinit = true;
+        if (control.ex) {
+            uint8_t buf[CAPTURE_SYNC_DATA_SIZE];
+            n = recv(data.connfd, buf, sizeof(buf), 0);
+            if (n > 1) {
+                if (buf[0] == CAPTURE_SYNC_DATA_TYPE) {
+                    struct capture_sync_data *sync = (struct capture_sync_data *)buf;
+                    if (sync->session == data.session) {
+                        data.wait_value = sync->value;
+                    }
+                }
+            }
+        } else {
+            const bool old_no_modifiers = data.no_modifiers;
+            const bool old_linear = data.linear;
+            const bool old_map_host = data.map_host;
+            data.accepted = control.capturing == 1;
+            data.no_modifiers = control.no_modifiers == 1;
+            data.linear = control.linear == 1;
+            data.map_host = control.map_host == 1;
+            data.enable_sem = control.enable_sem == 1;
+            memcpy(data.device_uuid, control.device_uuid, 16);
+            if (data.capturing && (old_no_modifiers != data.no_modifiers
+                || old_linear != data.linear
+                || old_map_host != data.map_host)) {
+                data.need_reinit = true;
+            }
         }
     }
     if (n == -1) {
@@ -163,20 +183,33 @@ void capture_update_socket()
 void capture_init_shtex(
         int width, int height, int format, int strides[4],
         int offsets[4], uint64_t modifier, uint32_t winid,
-        bool flip, uint32_t color_space, int nfd, int fds[4])
+        bool flip, uint32_t color_space, int nfd, int fds[4],
+        int sem_fd)
 {
+    int cfds[5];
+    int num_planes = nfd;
+
+    for (int i = 0; i < nfd; i++) {
+        cfds[i] = fds[i];
+    }
+    if (data.enable_sem && sem_fd >= 0) {
+        cfds[nfd++] = sem_fd;
+    }
+
     struct capture_texture_data td = {0};
     td.type = CAPTURE_TEXTURE_DATA_TYPE;
     td.nfd = nfd;
     td.width = width;
     td.height = height;
     td.format = format;
-    memcpy(td.strides, strides, sizeof(int) * nfd);
-    memcpy(td.offsets, offsets, sizeof(int) * nfd);
+    memcpy(td.strides, strides, sizeof(int) * num_planes);
+    memcpy(td.offsets, offsets, sizeof(int) * num_planes);
     td.modifier = modifier;
     td.winid = winid;
     td.flip = flip;
     td.color_space = color_space;
+    td.session = ++data.session;
+    td.sem = data.enable_sem && sem_fd >= 0 ? num_planes : 0;
 
     struct msghdr msg = {0};
 
@@ -187,14 +220,14 @@ void capture_init_shtex(
     msg.msg_iov = &io;
     msg.msg_iovlen = 1;
 
-    char cmsg_buf[CMSG_SPACE(sizeof(int) * 4)];
+    char cmsg_buf[CMSG_SPACE(sizeof(int) * 5)];
     msg.msg_control = cmsg_buf;
     msg.msg_controllen = CMSG_SPACE(sizeof(int) * nfd);
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
     cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
     cmsg->cmsg_len = CMSG_LEN(sizeof(int) * nfd);
-    memcpy(CMSG_DATA(cmsg), fds, sizeof(int) * nfd);
+    memcpy(CMSG_DATA(cmsg), cfds, sizeof(int) * nfd);
 
     const ssize_t sent = sendmsg(data.connfd, &msg, MSG_NOSIGNAL);
     if (sent < 0) {
@@ -203,6 +236,8 @@ void capture_init_shtex(
 
     data.capturing = true;
     data.need_reinit = false;
+    data.wait_value = 0;
+    data.signal_value = 0;
 }
 
 void capture_stop()
@@ -223,6 +258,39 @@ bool capture_should_init()
 bool capture_ready()
 {
     return data.capturing;
+}
+
+bool capture_should_render(uint64_t *wait, uint64_t *signal)
+{
+    if (data.enable_sem && data.wait_value < data.signal_value) {
+        return false;
+    }
+    *wait = data.enable_sem ? data.wait_value : data.signal_value;
+    *signal = data.signal_value + 2;
+    return true;
+}
+
+void capture_render_done()
+{
+    data.signal_value += 2;
+
+    struct capture_sync_data sd = {0};
+    sd.type = CAPTURE_SYNC_DATA_TYPE;
+    sd.session = data.session;
+    sd.value = data.signal_value;
+
+    struct msghdr msg = {0};
+    struct iovec io = {
+        .iov_base = &sd,
+        .iov_len = CAPTURE_SYNC_DATA_SIZE,
+    };
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
+
+    const ssize_t sent = sendmsg(data.connfd, &msg, MSG_NOSIGNAL);
+    if (sent < 0) {
+        hlog("Socket sendmsg error %s", strerror(errno));
+    }
 }
 
 bool capture_allocate_no_modifiers()

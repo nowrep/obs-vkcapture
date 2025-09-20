@@ -40,6 +40,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define MAX_PRESENT_SWAP_SEMAPHORE_COUNT 32
 static VkPipelineStageFlagBits semaphore_dst_stage_masks[MAX_PRESENT_SWAP_SEMAPHORE_COUNT];
+static VkSemaphore wait_semaphores[MAX_PRESENT_SWAP_SEMAPHORE_COUNT];
+static uint64_t wait_semaphore_values[MAX_PRESENT_SWAP_SEMAPHORE_COUNT];
 
 static bool vulkan_seen = false;
 
@@ -68,6 +70,7 @@ struct vk_swap_data {
     VkImage export_image;
     VkFormat export_format;
     VkDeviceMemory export_mem;
+    VkSemaphore export_sem;
     VkImage *swap_images;
     uint32_t image_count;
 
@@ -76,6 +79,7 @@ struct vk_swap_data {
     int dmabuf_strides[4];
     int dmabuf_offsets[4];
     uint64_t dmabuf_modifier;
+    int sem_fd;
     bool captured;
 };
 
@@ -431,6 +435,9 @@ static void vk_shtex_free(struct vk_data *data)
         if (swap->export_image)
             data->funcs.DestroyImage(device, swap->export_image,
                     data->ac);
+        if (swap->export_sem)
+            data->funcs.DestroySemaphore(device, swap->export_sem,
+                    data->ac);
 
         swap->dmabuf_nfd = 0;
         for (int i = 0; i < 4; ++i) {
@@ -438,6 +445,10 @@ static void vk_shtex_free(struct vk_data *data)
                 close(swap->dmabuf_fds[i]);
                 swap->dmabuf_fds[i] = -1;
             }
+        }
+        if (swap->sem_fd >= 0) {
+            close(swap->sem_fd);
+            swap->sem_fd = -1;
         }
 
         if (swap->export_mem)
@@ -893,6 +904,45 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     }
 #endif
 
+    VkExportSemaphoreCreateInfo sem_export_info = {};
+    sem_export_info.sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO;
+    sem_export_info.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+
+    VkSemaphoreTypeCreateInfo timeline_info = {};
+    timeline_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+    timeline_info.pNext = &sem_export_info;
+    timeline_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    timeline_info.initialValue = 0;
+
+    VkSemaphoreCreateInfo sem_info = {};
+    sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    sem_info.pNext = &timeline_info;
+    res = funcs->CreateSemaphore(device, &sem_info, NULL, &swap->export_sem);
+    if (VK_SUCCESS != res) {
+        hlog("CreateSemaphore failed %s", result_to_str(res));
+        funcs->DestroyImage(device, swap->export_image, data->ac);
+        swap->export_image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    /*
+      With Mesa this will work even with different devices, as opposed to
+      what the GL extension says, since the semaphore is just syncobj.
+      It may not work on NVIDIA however.
+    */
+    VkSemaphoreGetFdInfoKHR sem_fd_info = {};
+    sem_fd_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+    sem_fd_info.semaphore = swap->export_sem;
+    sem_fd_info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+    res = funcs->GetSemaphoreFdKHR(device, &sem_fd_info, &swap->sem_fd);
+    if (VK_SUCCESS != res) {
+        hlog("GetSemaphoreFdKHR failed %s", result_to_str(res));
+        funcs->DestroyImage(device, swap->export_image, data->ac);
+        funcs->DestroySemaphore(device, swap->export_sem, data->ac);
+        swap->export_image = VK_NULL_HANDLE;
+        return false;
+    }
+
     return true;
 }
 
@@ -908,7 +958,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
         vk_format_to_drm(swap->export_format),
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
         swap->winid, /*flip*/false, vk_color_space_to_obs(swap->color_space),
-        swap->dmabuf_nfd, swap->dmabuf_fds);
+        swap->dmabuf_nfd, swap->dmabuf_fds, swap->sem_fd);
 
     hlog("------------------ vulkan capture started ------------------");
     return true;
@@ -1022,7 +1072,8 @@ static void vk_shtex_destroy_frame_objects(struct vk_data *data,
 static void vk_shtex_capture(struct vk_data *data,
         struct vk_device_funcs *funcs,
         struct vk_swap_data *swap, uint32_t idx,
-        VkQueue queue, VkPresentInfoKHR *info)
+        VkQueue queue, VkPresentInfoKHR *info,
+        uint64_t wait, uint64_t signal)
 {
     VkResult res = VK_SUCCESS;
 
@@ -1195,6 +1246,13 @@ static void vk_shtex_capture(struct vk_data *data,
 
     /* ------------------------------------------------------ */
 
+    uint64_t signal_semaphore_values[2] = { signal, 0 };
+
+    VkTimelineSemaphoreSubmitInfo timeline_info = {};
+    timeline_info.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+    timeline_info.pWaitSemaphoreValues = wait_semaphore_values;
+    timeline_info.pSignalSemaphoreValues = signal_semaphore_values;
+
     VkSubmitInfo submit_info;
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.pNext = NULL;
@@ -1206,12 +1264,28 @@ static void vk_shtex_capture(struct vk_data *data,
     submit_info.signalSemaphoreCount = 0;
     submit_info.pSignalSemaphores = NULL;
 
-    if (info->waitSemaphoreCount <= MAX_PRESENT_SWAP_SEMAPHORE_COUNT) {
-        submit_info.waitSemaphoreCount = info->waitSemaphoreCount;
-        submit_info.pWaitSemaphores = info->pWaitSemaphores;
+    VkSemaphore signal_semaphores[2];
+
+    if (info->waitSemaphoreCount < MAX_PRESENT_SWAP_SEMAPHORE_COUNT) {
+        for (uint32_t i = 0; i < info->waitSemaphoreCount; ++i) {
+            wait_semaphores[i] = info->pWaitSemaphores[i];
+            wait_semaphore_values[i] = 0;
+        }
+        wait_semaphores[info->waitSemaphoreCount] = swap->export_sem;
+        wait_semaphore_values[info->waitSemaphoreCount] = wait;
+
+        signal_semaphores[0] = swap->export_sem;
+        signal_semaphores[1] = frame_data->semaphore;
+
+        submit_info.pNext = &timeline_info;
+        submit_info.waitSemaphoreCount = info->waitSemaphoreCount + 1;
+        submit_info.pWaitSemaphores = wait_semaphores;
         submit_info.pWaitDstStageMask = semaphore_dst_stage_masks;
-        submit_info.signalSemaphoreCount = 1;
-        submit_info.pSignalSemaphores = &frame_data->semaphore;
+        submit_info.signalSemaphoreCount = 2;
+        submit_info.pSignalSemaphores = signal_semaphores;
+
+        timeline_info.waitSemaphoreValueCount = submit_info.waitSemaphoreCount;
+        timeline_info.signalSemaphoreValueCount = submit_info.signalSemaphoreCount;
 
         info->waitSemaphoreCount = 1;
         info->pWaitSemaphores = &frame_data->semaphore;
@@ -1260,7 +1334,11 @@ static void vk_capture(struct vk_data *data, VkQueue queue,
             return;
         }
 
-        vk_shtex_capture(data, &data->funcs, swap, 0, queue, info);
+        uint64_t wait, signal;
+        if (capture_should_render(&wait, &signal)) {
+            vk_shtex_capture(data, &data->funcs, swap, 0, queue, info, wait, signal);
+            capture_render_done();
+        }
     }
 }
 
@@ -1457,8 +1535,10 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
         VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
         VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
         VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME,
+        VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+        VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
     };
-    static uint32_t req_extensions_count = 11;
+    static uint32_t req_extensions_count = 13;
 
     int new_count = info->enabledExtensionCount + req_extensions_count;
     const char **exts = (const char**)malloc(sizeof(char*) * new_count);
@@ -1574,6 +1654,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     GETADDR(GetMemoryFdKHR);
     GETADDR(CreateSemaphore);
     GETADDR(DestroySemaphore);
+    GETADDR(GetSemaphoreFdKHR);
 
     dfuncs->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)
         gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
@@ -1609,7 +1690,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device,
     }
 
     const char *required_device_extensions[] = {
-        VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME
+        VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
     };
 
     bool extensions_found = true;
@@ -1776,9 +1857,11 @@ OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
             swap_data->winid = find_surf_winid(data->inst_data, cinfo->surface);
             swap_data->export_image = VK_NULL_HANDLE;
             swap_data->export_mem = VK_NULL_HANDLE;
+            swap_data->export_sem = VK_NULL_HANDLE;
             swap_data->image_count = count;
             swap_data->dmabuf_nfd = 0;
             memset(swap_data->dmabuf_fds, -1, sizeof(swap_data->dmabuf_fds));
+            swap_data->sem_fd = -1;
             swap_data->captured = false;
         }
     }
