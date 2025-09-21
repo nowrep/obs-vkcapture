@@ -69,7 +69,9 @@ struct capture_texture_data {
     uint32_t winid;
     uint8_t flip;
     uint32_t color_space;
-    uint8_t padding[65];
+    uint32_t session;
+    uint8_t sem;
+    uint8_t padding[60];
 } __attribute__((packed));
 
 #define CAPTURE_TEXTURE_DATA_TYPE 11
@@ -82,24 +84,41 @@ struct capture_control_data {
     uint8_t linear;
     uint8_t map_host;
     uint8_t device_uuid[16];
-    uint8_t padding[12];
+    uint8_t ex;
+    uint8_t enable_sem;
+    uint8_t padding[10];
 } __attribute__((packed));
 
 #define CAPTURE_CONTROL_DATA_TYPE 10
 #define CAPTURE_CONTROL_DATA_SIZE 32
 static_assert(sizeof(struct capture_control_data) == CAPTURE_CONTROL_DATA_SIZE, "size mismatch");
 
+struct capture_sync_data {
+    uint8_t type;
+    uint32_t session;
+    uint64_t value;
+    uint8_t padding[19];
+} __attribute__((packed));
+
+#define CAPTURE_SYNC_DATA_TYPE 12
+#define CAPTURE_SYNC_DATA_SIZE 32
+static_assert(sizeof(struct capture_sync_data) == CAPTURE_SYNC_DATA_SIZE, "size mismatch");
+
 void capture_init();
 void capture_update_socket();
 void capture_init_shtex(
         int width, int height, int format, int strides[4],
         int offsets[4], uint64_t modifier, uint32_t winid,
-        bool flip, uint32_t color_space, int nfd, int fds[4]);
+        bool flip, uint32_t color_space, int nfd, int fds[4],
+        int sem_fd);
 void capture_stop();
 
 bool capture_should_stop();
 bool capture_should_init();
 bool capture_ready();
+
+bool capture_should_render(uint64_t *wait, uint64_t *signal);
+void capture_render_done();
 
 bool capture_allocate_no_modifiers();
 bool capture_allocate_linear();

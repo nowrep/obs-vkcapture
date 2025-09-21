@@ -140,6 +140,7 @@ struct vk_device_funcs {
     DEF_FUNC(GetImageDrmFormatModifierPropertiesEXT);
     DEF_FUNC(CreateSemaphore);
     DEF_FUNC(DestroySemaphore);
+    DEF_FUNC(GetSemaphoreFdKHR);
 };
 
 #undef DEF_FUNC
