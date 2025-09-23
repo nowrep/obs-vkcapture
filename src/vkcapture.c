@@ -359,8 +359,8 @@ static vkcapture_client_t *find_matching_client(vkcapture_source_t *ctx)
 {
     vkcapture_client_t *client = NULL;
     if (ctx->window) {
-        for (size_t i = 0; i < server.clients.num; i++) {
-            vkcapture_client_t *c = server.clients.array + i;
+        for (size_t i = server.clients.num; i > 0; i--) {
+            vkcapture_client_t *c = server.clients.array + i - 1;
             bool match = !strcmp(c->cdata.exe, ctx->window);
             if ((ctx->window_match && match) || (ctx->window_exclude && !match)) {
                 client = c;
@@ -368,7 +368,7 @@ static vkcapture_client_t *find_matching_client(vkcapture_source_t *ctx)
             }
         }
     } else if (server.clients.num) {
-        client = server.clients.array;
+        client = server.clients.array + server.clients.num - 1;
     }
     return client;
 }
@@ -649,6 +649,11 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
         pthread_mutex_lock(&server.mutex);
         for (size_t i = 0; i < server.clients.num; i++) {
             vkcapture_client_t *client = server.clients.array + i;
+
+            if (i > 0 && !strcmp(client->cdata.exe, (server.clients.array + i - 1)->cdata.exe)) {
+                continue;
+            }
+
             obs_property_list_add_string(p, client->cdata.exe, client->cdata.exe);
             if (ctx->window && !strcmp(client->cdata.exe, ctx->window)) {
                 window_found = true;
