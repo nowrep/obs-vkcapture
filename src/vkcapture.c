@@ -650,7 +650,13 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
         for (size_t i = 0; i < server.clients.num; i++) {
             vkcapture_client_t *client = server.clients.array + i;
 
-            if (i > 0 && !strcmp(client->cdata.exe, (server.clients.array + i - 1)->cdata.exe)) {
+            bool already_exists = false;
+            for (size_t j = 0; j < obs_property_list_item_count(p); j++) {
+                if (!strcmp(client->cdata.exe, obs_property_list_item_string(p, j))) {
+                    already_exists = true;
+                }
+            }
+            if (already_exists) {
                 continue;
             }
 
