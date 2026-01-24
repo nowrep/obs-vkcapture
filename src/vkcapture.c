@@ -53,6 +53,10 @@ static wl_cursor_t *wlcursor = NULL;
 static uint8_t gl_device_uuid[16];
 void (*p_glGetUnsignedBytei_vEXT)(unsigned int target, unsigned int index, unsigned char *data) = NULL;
 
+#define VK_COLOR_SPACE_SRGB_NONLINEAR_KHR        0
+#define VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT  1000104002
+#define VK_COLOR_SPACE_HDR10_ST2084_EXT          1000104008
+
 enum vkcapture_import_attempt {
     IMPORT_DEFAULT = 0,
     IMPORT_NO_MODIFIERS = 1,
@@ -562,23 +566,105 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
         ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
     }
 
-    const enum gs_color_space color_space = gs_get_color_space();
-    const bool linear_srgb = gs_get_linear_srgb();
-    const char *tech_name = linear_srgb ? "DrawSrgbDecompress" : "Draw";
+    enum gs_color_space source_space = GS_CS_SRGB;
+    const bool is_pq = ctx->tdata.color_space == VK_COLOR_SPACE_HDR10_ST2084_EXT;
+    if (is_pq)
+        source_space = GS_CS_709_EXTENDED;
+    else if (ctx->tdata.color_space == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
+        source_space = GS_CS_709_SCRGB;
+
+    const enum gs_color_space current_space = gs_get_color_space();
+    bool linear_sample = !gs_get_linear_srgb();
+    const char *tech_name = "Draw";
     float multiplier = 1.f;
 
-    if (color_space == GS_CS_709_EXTENDED) {
-        tech_name = "DrawPQ";
-        multiplier = 10000.f / obs_get_video_sdr_white_level();
+    switch (source_space) {
+    case GS_CS_SRGB:
+        switch (current_space) {
+        case GS_CS_SRGB:
+            if (ctx->allow_transparency && !linear_sample)
+                tech_name = "DrawSrgbDecompress";
+            break;
+        case GS_CS_SRGB_16F:
+        case GS_CS_709_EXTENDED:
+            if (!linear_sample)
+                tech_name = "DrawSrgbDecompress";
+            break;
+        case GS_CS_709_SCRGB:
+            if (linear_sample)
+                tech_name = "DrawMultiply";
+            else
+                tech_name = "DrawSrgbDecompressMultiply";
+            multiplier = obs_get_video_sdr_white_level() / 80.f;
+        }
+        break;
+    case GS_CS_SRGB_16F:
+        linear_sample = true;
+        switch (current_space) {
+        case GS_CS_SRGB:
+        case GS_CS_SRGB_16F:
+        case GS_CS_709_EXTENDED:
+            tech_name = is_pq ? "DrawSrgbDecompress" : "Draw";
+            break;
+        case GS_CS_709_SCRGB:
+            tech_name = is_pq ? "DrawSrgbDecompressMultiply" : "DrawMultiply";
+            multiplier = obs_get_video_sdr_white_level() / 80.f;
+        }
+        break;
+    case GS_CS_709_EXTENDED:
+        linear_sample = true;
+        if (is_pq) {
+            switch (current_space) {
+            case GS_CS_SRGB:
+            case GS_CS_SRGB_16F:
+                tech_name = "DrawTonemapPQ";
+                multiplier = 10000.f / obs_get_video_sdr_white_level();
+                break;
+            case GS_CS_709_EXTENDED:
+                tech_name = "DrawPQ";
+                multiplier = 10000.f / obs_get_video_sdr_white_level();
+                break;
+            case GS_CS_709_SCRGB:
+                tech_name = "DrawPQ";
+                multiplier = 10000.f / 80.f;
+            }
+        } else {
+            switch (current_space) {
+            case GS_CS_SRGB:
+            case GS_CS_SRGB_16F:
+                tech_name = "DrawTonemap";
+                break;
+            case GS_CS_709_SCRGB:
+                tech_name = "DrawMultiply";
+                multiplier = obs_get_video_sdr_white_level() / 80.f;
+            default:
+                break;
+            }
+        }
+        break;
+    case GS_CS_709_SCRGB:
+        linear_sample = true;
+        switch (current_space) {
+        case GS_CS_SRGB:
+        case GS_CS_SRGB_16F:
+            tech_name = "DrawMultiplyTonemap";
+            multiplier = 80.f / obs_get_video_sdr_white_level();
+            break;
+        case GS_CS_709_EXTENDED:
+            tech_name = "DrawMultiply";
+            multiplier = 80.f / obs_get_video_sdr_white_level();
+        default:
+            break;
+        }
     }
 
     effect = obs_get_base_effect(ctx->allow_transparency ? OBS_EFFECT_DEFAULT : OBS_EFFECT_OPAQUE);
 
     const bool previous = gs_framebuffer_srgb_enabled();
-    gs_enable_framebuffer_srgb(linear_srgb);
+    gs_enable_framebuffer_srgb(ctx->allow_transparency || linear_sample);
 
     gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
-    if (linear_srgb)
+    if (linear_sample)
         gs_effect_set_texture_srgb(image, ctx->texture);
     else
         gs_effect_set_texture(image, ctx->texture);
@@ -591,11 +677,13 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
         }
     }
 
+    gs_enable_framebuffer_srgb(previous);
+
     if (!ctx->allow_transparency && ctx->show_cursor) {
         effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
         tech_name = "Draw";
         multiplier = 1.f;
-        if (color_space == GS_CS_709_SCRGB) {
+        if (current_space == GS_CS_709_SCRGB) {
             tech_name = "DrawMultiply";
             multiplier = obs_get_video_sdr_white_level() / 80.f;
         }
@@ -603,9 +691,9 @@ static void vkcapture_source_render(void *data, gs_effect_t *effect)
             gs_effect_set_float(gs_effect_get_param_by_name(effect, "multiplier"), multiplier);
             cursor_render(ctx);
         }
-    }
 
-    gs_enable_framebuffer_srgb(previous);
+        gs_set_linear_srgb(previous);
+    }
 }
 
 static const char *vkcapture_source_get_name(void *data)
@@ -684,15 +772,29 @@ enum gs_color_space vkcapture_get_color_space(void *data, size_t count, const en
 {
     vkcapture_source_t *ctx = data;
 
-    enum gs_color_space color_space = ctx->tdata.color_space;
+    enum gs_color_space capture_space = GS_CS_SRGB;
+    uint32_t color_space = ctx->tdata.color_space;
 
-    if (ctx->force_hdr) {
-        color_space = GS_CS_709_EXTENDED;
+    if (color_space == VK_COLOR_SPACE_HDR10_ST2084_EXT || color_space == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT) {
+        for (size_t i = 0; i < count; ++i) {
+            if (preferred_spaces[i] == GS_CS_709_SCRGB) {
+                return GS_CS_709_SCRGB;
+            }
+        }
+        capture_space = GS_CS_709_EXTENDED;
     }
+    // TODO: Maybe handle GS_CS_SRGB_16F? SDR for >8 bit format
 
-    UNUSED_PARAMETER(count);
-    UNUSED_PARAMETER(preferred_spaces);
-    return color_space;
+    // Same as win-capture/game-capture.c
+    enum gs_color_space space = capture_space;
+    for (size_t i = 0; i < count; ++i) {
+        const enum gs_color_space preferred_space = preferred_spaces[i];
+        space = preferred_space;
+        if (preferred_space == capture_space) {
+            break;
+        }
+    }
+    return space;
 }
 
 static struct obs_source_info vkcapture_input = {
