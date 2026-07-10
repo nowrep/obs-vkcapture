@@ -942,8 +942,9 @@ fail:
     return false;
 }
 
-static bool gl_init(void *display, void *surface)
+static bool gl_init(void *display, void *surface, bool glx)
 {
+    data.glx = glx;
     data.display = display;
     data.surface = surface;
     querySurface(&data.width, &data.height);
@@ -997,7 +998,7 @@ static bool gl_capture_disabled()
     return false;
 }
 
-static void gl_capture(void *display, void *surface)
+static void gl_capture(void *display, void *surface, bool glx)
 {
     if (gl_capture_disabled()) {
         data.valid = false;
@@ -1011,7 +1012,7 @@ static void gl_capture(void *display, void *surface)
     }
 
     if (capture_should_init()) {
-        if (!gl_init(display, surface)) {
+        if (!gl_init(display, surface, glx)) {
             gl_free();
             data.valid = false;
             hlog("gl_init failed");
@@ -1087,7 +1088,7 @@ unsigned eglSwapBuffers(void *display, void *surface)
     }
 
     if (data.valid) {
-        gl_capture(display, surface);
+        gl_capture(display, surface, /*glx*/false);
     }
 
     return egl_f.SwapBuffers(display, surface);
@@ -1187,7 +1188,7 @@ void glXSwapBuffers(void *display, void *drawable)
     }
 
     if (data.valid) {
-        gl_capture(display, drawable);
+        gl_capture(display, drawable, /*glx*/true);
     }
 
     glx_f.SwapBuffers(display, drawable);
@@ -1200,7 +1201,7 @@ int64_t glXSwapBuffersMscOML(void *display, void *drawable, int64_t target_msc, 
     }
 
     if (data.valid) {
-        gl_capture(display, drawable);
+        gl_capture(display, drawable, /*glx*/true);
     }
 
     return glx_f.SwapBuffersMscOML(display, drawable, target_msc, divisor, remainder);
