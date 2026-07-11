@@ -25,6 +25,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 * libxcb (optional)
 * libwayland-client (optional)
 * wayland-scanner (optional)
+* Qt6 Widgets (required if building the OBS plugin, BUILD_PLUGIN=ON)
 
 ## Building
 
