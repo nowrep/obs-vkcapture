@@ -1,1 +1,5 @@
 build
+dist/pkg/
+dist/src/
+dist/obs-vkcapture/
+dist/*.pkg.tar.zst
