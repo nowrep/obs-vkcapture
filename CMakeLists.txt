@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(obs-vkcapture
-   LANGUAGES C
+   LANGUAGES C CXX
    VERSION 1.5.6)
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Workaround for GNU ld 2.46.1 internal error
+    add_link_options("-fuse-ld=lld")
+endif()
 
 include(GNUInstallDirs)
 find_package(Vulkan REQUIRED)
@@ -47,6 +52,9 @@ endif()
 set(CMAKE_C_STANDARD 11)
 
 if (BUILD_PLUGIN)
+    find_package(Qt6 COMPONENTS Widgets REQUIRED)
+    set(CMAKE_AUTOMOC ON)
+
     if (NOT TARGET OBS::libobs)
         find_package(libobs QUIET)
     endif()
@@ -65,8 +73,8 @@ if (BUILD_PLUGIN)
         endif()
     endif()
 
-    set(PLUGIN_SOURCES src/vkcapture.c)
-    set(PLUGIN_LIBS ${PLUGIN_LIBS} obs-frontend-api PkgConfig::EGL)
+    set(PLUGIN_SOURCES src/vkcapture.c src/vkcapture-gui.cpp)
+    set(PLUGIN_LIBS ${PLUGIN_LIBS} obs-frontend-api PkgConfig::EGL Qt6::Widgets)
     if (HAVE_X11_XCB)
         set(PLUGIN_SOURCES ${PLUGIN_SOURCES} src/xcursor-xcb.c)
         set(PLUGIN_LIBS ${PLUGIN_LIBS} PkgConfig::XCB PkgConfig::XCB_XFIXES)

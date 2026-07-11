@@ -1,0 +1,501 @@
+#include "vkcapture-gui.h"
+
+#include <QButtonGroup>
+#include <QDebug>
+#include <QDialog>
+#include <QDir>
+#include <QFile>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QList>
+#include <QMap>
+#include <QMessageBox>
+#include <QProcess>
+#include <QPushButton>
+#include <QRadioButton>
+#include <QRegularExpression>
+#include <QSharedPointer>
+#include <QTextStream>
+#include <QVBoxLayout>
+
+#include <obs-frontend-api.h>
+#include <obs-module.h>
+
+struct VdfNode {
+  QString key;
+  QString value;
+  bool is_object = false;
+  QList<QSharedPointer<VdfNode>> children;
+
+  QSharedPointer<VdfNode> find_child(const QString &child_key) const {
+    for (const auto &child : children) {
+      if (child->key.compare(child_key, Qt::CaseInsensitive) == 0) {
+        return child;
+      }
+    }
+    return nullptr;
+  }
+
+  QSharedPointer<VdfNode> get_or_create_child_object(const QString &child_key) {
+    auto child = find_child(child_key);
+    if (!child) {
+      child = QSharedPointer<VdfNode>::create();
+      child->key = child_key;
+      child->is_object = true;
+      children.append(child);
+    } else {
+      child->is_object = true;
+    }
+    return child;
+  }
+
+  void set_child_value(const QString &child_key, const QString &child_val) {
+    auto child = find_child(child_key);
+    if (!child) {
+      child = QSharedPointer<VdfNode>::create();
+      child->key = child_key;
+      children.append(child);
+    }
+    child->is_object = false;
+    child->value = child_val;
+    child->children.clear();
+  }
+};
+
+static QSharedPointer<VdfNode> parse_vdf(const QString &filepath) {
+  QFile file(filepath);
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    return nullptr;
+  }
+  QTextStream in(&file);
+  QList<QString> all_tokens;
+  while (!in.atEnd()) {
+    QString line = in.readLine();
+    int i = 0;
+    while (i < line.length()) {
+      if (line[i].isSpace()) {
+        i++;
+        continue;
+      }
+      if (line[i] == '/' && i + 1 < line.length() && line[i + 1] == '/') {
+        break; // Comment
+      }
+      if (line[i] == '{') {
+        all_tokens.append("{");
+        i++;
+      } else if (line[i] == '}') {
+        all_tokens.append("}");
+        i++;
+      } else if (line[i] == '"') {
+        i++; // skip open quote
+        QString result;
+        while (i < line.length()) {
+          if (line[i] == '\\' && i + 1 < line.length()) {
+            if (line[i + 1] == '"') {
+              result.append('"');
+              i += 2;
+            } else if (line[i + 1] == '\\') {
+              result.append('\\');
+              i += 2;
+            } else {
+              result.append(line[i]);
+              i++;
+            }
+          } else if (line[i] == '"') {
+            i++;
+            break;
+          } else {
+            result.append(line[i]);
+            i++;
+          }
+        }
+        all_tokens.append(result);
+      } else {
+        int start = i;
+        while (i < line.length() && !line[i].isSpace() && line[i] != '{' &&
+               line[i] != '}') {
+          i++;
+        }
+        all_tokens.append(line.mid(start, i - start));
+      }
+    }
+  }
+  file.close();
+
+  auto root = QSharedPointer<VdfNode>::create();
+  root->is_object = true;
+  QList<QSharedPointer<VdfNode>> stack;
+  stack.append(root);
+
+  int token_idx = 0;
+  while (token_idx < all_tokens.size()) {
+    QString tok = all_tokens[token_idx];
+    if (tok == "{") {
+      if (stack.last()->children.isEmpty()) {
+        token_idx++;
+        continue;
+      }
+      auto last_child = stack.last()->children.last();
+      last_child->is_object = true;
+      stack.append(last_child);
+      token_idx++;
+    } else if (tok == "}") {
+      if (stack.size() > 1) {
+        stack.removeLast();
+      }
+      token_idx++;
+    } else {
+      bool has_value = (token_idx + 1 < all_tokens.size()) &&
+                       (all_tokens[token_idx + 1] != "{") &&
+                       (all_tokens[token_idx + 1] != "}");
+      auto node = QSharedPointer<VdfNode>::create();
+      node->key = tok;
+      if (has_value) {
+        node->value = all_tokens[token_idx + 1];
+        node->is_object = false;
+        token_idx += 2;
+      } else {
+        node->is_object = true;
+        token_idx += 1;
+      }
+      stack.last()->children.append(node);
+    }
+  }
+
+  return root;
+}
+
+static void write_vdf_node(QTextStream &out,
+                           const QSharedPointer<VdfNode> &node, int depth) {
+  QString indent(depth, '\t');
+  if (node->key.isEmpty()) {
+    for (const auto &child : node->children) {
+      write_vdf_node(out, child, depth);
+    }
+    return;
+  }
+
+  auto escape_str = [](const QString &s) {
+    QString res;
+    for (int j = 0; j < s.length(); j++) {
+      if (s[j] == '"') {
+        res.append("\\\"");
+      } else if (s[j] == '\\') {
+        res.append("\\\\");
+      } else {
+        res.append(s[j]);
+      }
+    }
+    return res;
+  };
+
+  if (node->is_object) {
+    out << indent << "\"" << escape_str(node->key) << "\"\n";
+    out << indent << "{\n";
+    for (const auto &child : node->children) {
+      write_vdf_node(out, child, depth + 1);
+    }
+    out << indent << "}\n";
+  } else {
+    out << indent << "\"" << escape_str(node->key) << "\"\t\t\""
+        << escape_str(node->value) << "\"\n";
+  }
+}
+
+static bool write_vdf(const QSharedPointer<VdfNode> &root,
+                      const QString &filepath) {
+  QFile file(filepath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    return false;
+  }
+  QTextStream out(&file);
+  write_vdf_node(out, root, 0);
+  file.close();
+  return true;
+}
+
+static QString get_steam_path() {
+  QString home = QDir::homePath();
+  QStringList paths = {
+      home + "/.steam/steam", home + "/.local/share/Steam",
+      home + "/.var/app/com.valvesoftware.Steam/.steam/steam",
+      home + "/.var/app/com.valvesoftware.Steam/.local/share/Steam"};
+  for (const auto &path : paths) {
+    if (QDir(path).exists()) {
+      return path;
+    }
+  }
+  return "";
+}
+
+static QStringList get_library_folders(const QString &steam_path) {
+  QStringList folders;
+  QString vdf_path = steam_path + "/steamapps/libraryfolders.vdf";
+  auto root = parse_vdf(vdf_path);
+  if (!root) {
+    folders.append(steam_path);
+    return folders;
+  }
+  auto lib_node = root->find_child("libraryfolders");
+  if (lib_node) {
+    for (const auto &child : lib_node->children) {
+      if (child->is_object) {
+        auto path_node = child->find_child("path");
+        if (path_node && !path_node->value.isEmpty()) {
+          folders.append(path_node->value);
+        }
+      }
+    }
+  }
+  if (folders.isEmpty()) {
+    folders.append(steam_path);
+  }
+  return folders;
+}
+
+static QMap<QString, QString>
+get_installed_games(const QStringList &library_folders) {
+  QMap<QString, QString> games;
+  for (const auto &folder : library_folders) {
+    QDir dir(folder + "/steamapps");
+    if (!dir.exists())
+      continue;
+    QStringList filters;
+    filters << "appmanifest_*.acf";
+    QStringList files = dir.entryList(filters, QDir::Files);
+    for (const auto &filename : files) {
+      QString file_path = dir.absoluteFilePath(filename);
+      auto acf_root = parse_vdf(file_path);
+      if (!acf_root)
+        continue;
+      auto app_state = acf_root->find_child("AppState");
+      if (app_state) {
+        auto appid_node = app_state->find_child("appid");
+        auto name_node = app_state->find_child("name");
+        if (appid_node && name_node && !appid_node->value.isEmpty()) {
+          games.insert(appid_node->value, name_node->value);
+        }
+      }
+    }
+  }
+  return games;
+}
+
+static bool apply_launch_options(const QString &localconfig_path,
+                                 const QMap<QString, QString> &games,
+                                 int action_type) {
+  auto root = parse_vdf(localconfig_path);
+  if (!root)
+    return false;
+
+  auto user_store = root->get_or_create_child_object("UserLocalConfigStore");
+  auto software = user_store->get_or_create_child_object("Software");
+  auto valve = software->get_or_create_child_object("Valve");
+  auto steam = valve->get_or_create_child_object("Steam");
+  auto apps = steam->get_or_create_child_object("Apps");
+
+  auto modify_opts = [](const QString &current_opts, const QString &game_name,
+                        int action) -> QString {
+    QString clean = current_opts.trimmed();
+    QRegularExpression regex(
+        "obs-gamecapture(?:\\s+OBS_VKCAPTURE_NAME=(?:\"[^\"]*\"|[^\\s]*))?\\s*",
+        QRegularExpression::CaseInsensitiveOption);
+    clean.replace(regex, "");
+    clean = clean.trimmed();
+
+    if (action == 2) { // Apply with game name
+      QString escaped_name = game_name;
+      escaped_name.replace("\"", "\\\"");
+      QString wrapper =
+          "obs-gamecapture OBS_VKCAPTURE_NAME=\"" + escaped_name + "\"";
+      if (clean.isEmpty()) {
+        clean = wrapper + " %command%";
+      } else {
+        if (clean.contains("%command%")) {
+          clean.prepend(wrapper + " ");
+        } else {
+          clean = wrapper + " " + clean + " %command%";
+        }
+      }
+    } else if (action == 1) { // Apply obs-gamecapture (no name)
+      QString wrapper = "obs-gamecapture";
+      if (clean.isEmpty()) {
+        clean = wrapper + " %command%";
+      } else {
+        if (clean.contains("%command%")) {
+          clean.prepend(wrapper + " ");
+        } else {
+          clean = wrapper + " " + clean + " %command%";
+        }
+      }
+    } else if (action == 0) { // Remove
+      if (clean == "%command%") {
+        clean = "";
+      }
+    }
+
+    return clean.simplified();
+  };
+
+  for (auto it = games.begin(); it != games.end(); ++it) {
+    QString appid = it.key();
+    QString game_name = it.value();
+
+    auto app_node = apps->get_or_create_child_object(appid);
+    auto launch_node = app_node->find_child("LaunchOptions");
+    QString current_opts = launch_node ? launch_node->value : "";
+
+    QString new_opts = modify_opts(current_opts, game_name, action_type);
+
+    if (new_opts.isEmpty()) {
+      if (launch_node) {
+        app_node->children.removeOne(launch_node);
+      }
+    } else {
+      app_node->set_child_value("LaunchOptions", new_opts);
+    }
+  }
+
+  return write_vdf(root, localconfig_path);
+}
+
+class SteamLaunchOptionsDialog : public QDialog {
+  Q_OBJECT
+public:
+  SteamLaunchOptionsDialog(QWidget *parent = nullptr) : QDialog(parent) {
+    setWindowTitle(obs_module_text("SteamLaunchOptions.Title"));
+    setMinimumWidth(500);
+
+    auto *layout = new QVBoxLayout(this);
+
+    auto *desc_label =
+        new QLabel(obs_module_text("SteamLaunchOptions.Desc"), this);
+    layout->addWidget(desc_label);
+
+    m_group = new QButtonGroup(this);
+
+    m_opt1 = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt1"), this);
+    m_opt2 = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt2"), this);
+    m_opt3 = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt3"), this);
+
+    m_group->addButton(m_opt1, 1);
+    m_group->addButton(m_opt2, 2);
+    m_group->addButton(m_opt3, 0);
+
+    layout->addWidget(m_opt1);
+    layout->addWidget(m_opt2);
+    layout->addWidget(m_opt3);
+
+    m_opt2->setChecked(true);
+
+    m_warning_label = new QLabel(this);
+    m_warning_label->setStyleSheet(
+        "color: #ff3333; font-weight: bold; margin-top: 10px;");
+    m_warning_label->setWordWrap(true);
+    layout->addWidget(m_warning_label);
+
+    update_steam_warning();
+
+    auto *btn_layout = new QHBoxLayout();
+    m_apply_btn =
+        new QPushButton(obs_module_text("SteamLaunchOptions.Apply"), this);
+    auto *cancel_btn =
+        new QPushButton(obs_module_text("SteamLaunchOptions.Cancel"), this);
+
+    btn_layout->addStretch();
+    btn_layout->addWidget(m_apply_btn);
+    btn_layout->addWidget(cancel_btn);
+    layout->addLayout(btn_layout);
+
+    connect(m_apply_btn, &QPushButton::clicked, this,
+            &SteamLaunchOptionsDialog::on_apply);
+    connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
+  }
+
+private:
+  QButtonGroup *m_group;
+  QRadioButton *m_opt1;
+  QRadioButton *m_opt2;
+  QRadioButton *m_opt3;
+  QLabel *m_warning_label;
+  QPushButton *m_apply_btn;
+
+  bool is_steam_running() {
+    QProcess process;
+    process.start("pgrep", QStringList() << "-x" << "steam");
+    process.waitForFinished();
+    return process.exitCode() == 0;
+  }
+
+  void update_steam_warning() {
+    if (is_steam_running()) {
+      m_warning_label->setText(
+          obs_module_text("SteamLaunchOptions.WarnSteamRunning"));
+      m_warning_label->show();
+    } else {
+      m_warning_label->hide();
+    }
+  }
+
+  void on_apply() {
+    QString steam_path = get_steam_path();
+    if (steam_path.isEmpty()) {
+      QMessageBox::critical(this, windowTitle(),
+                            "Steam installation path not found.");
+      return;
+    }
+
+    QStringList libs = get_library_folders(steam_path);
+    QMap<QString, QString> games = get_installed_games(libs);
+    if (games.isEmpty()) {
+      QMessageBox::warning(
+          this, windowTitle(),
+          "No installed Steam games found in library folders.");
+      return;
+    }
+
+    QDir userdata_dir(steam_path + "/userdata");
+    if (!userdata_dir.exists()) {
+      QMessageBox::critical(this, windowTitle(),
+                            "Steam userdata folder not found.");
+      return;
+    }
+
+    QStringList user_dirs =
+        userdata_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    int success_count = 0;
+    int action_type = m_group->checkedId();
+
+    for (const auto &user_id : user_dirs) {
+      bool ok;
+      user_id.toInt(&ok);
+      if (!ok)
+        continue;
+
+      QString localconfig_path =
+          userdata_dir.absoluteFilePath(user_id + "/config/localconfig.vdf");
+      if (QFile::exists(localconfig_path)) {
+        if (apply_launch_options(localconfig_path, games, action_type)) {
+          success_count++;
+        }
+      }
+    }
+
+    if (success_count > 0) {
+      QString msg = obs_module_text("SteamLaunchOptions.Success");
+      msg = msg.arg(games.size());
+      QMessageBox::information(this, windowTitle(), msg);
+      accept();
+    } else {
+      QMessageBox::critical(this, windowTitle(),
+                            obs_module_text("SteamLaunchOptions.Error"));
+    }
+  }
+};
+
+extern "C" void show_steam_launch_options_dialog(void *parent) {
+  SteamLaunchOptionsDialog dlg(static_cast<QWidget *>(parent));
+  dlg.exec();
+}
+
+#include "vkcapture-gui.moc"
