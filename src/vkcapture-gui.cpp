@@ -1,3 +1,8 @@
+// Copyright (C) 2026 Anthony Mendez <anthonymendez9@gmail.com>
+//
+// Use of this source code is governed by a GPL-2.0-or-later license that can
+// be found in the LICENSE file.
+
 #include "vkcapture-gui.h"
 
 #include <QButtonGroup>
@@ -21,13 +26,16 @@
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 
+namespace {
+
+// Represents a node in the Valve Data Format (VDF) tree structure.
 struct VdfNode {
   QString key;
   QString value;
   bool is_object = false;
   QList<QSharedPointer<VdfNode>> children;
 
-  QSharedPointer<VdfNode> find_child(const QString &child_key) const {
+  QSharedPointer<VdfNode> FindChild(const QString &child_key) const {
     for (const auto &child : children) {
       if (child->key.compare(child_key, Qt::CaseInsensitive) == 0) {
         return child;
@@ -36,8 +44,8 @@ struct VdfNode {
     return nullptr;
   }
 
-  QSharedPointer<VdfNode> get_or_create_child_object(const QString &child_key) {
-    auto child = find_child(child_key);
+  QSharedPointer<VdfNode> GetOrCreateChildObject(const QString &child_key) {
+    auto child = FindChild(child_key);
     if (!child) {
       child = QSharedPointer<VdfNode>::create();
       child->key = child_key;
@@ -49,8 +57,8 @@ struct VdfNode {
     return child;
   }
 
-  void set_child_value(const QString &child_key, const QString &child_val) {
-    auto child = find_child(child_key);
+  void SetChildValue(const QString &child_key, const QString &child_val) {
+    auto child = FindChild(child_key);
     if (!child) {
       child = QSharedPointer<VdfNode>::create();
       child->key = child_key;
@@ -62,7 +70,8 @@ struct VdfNode {
   }
 };
 
-static QSharedPointer<VdfNode> parse_vdf(const QString &filepath) {
+// Parses a VDF file from the given filepath into a tree representation.
+QSharedPointer<VdfNode> ParseVdf(const QString &filepath) {
   QFile file(filepath);
   if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
     return nullptr;
@@ -165,12 +174,13 @@ static QSharedPointer<VdfNode> parse_vdf(const QString &filepath) {
   return root;
 }
 
-static void write_vdf_node(QTextStream &out,
-                           const QSharedPointer<VdfNode> &node, int depth) {
+// Writes a single VdfNode and its children recursively to a QTextStream.
+void WriteVdfNode(QTextStream &out, const QSharedPointer<VdfNode> &node,
+                  int depth) {
   QString indent(depth, '\t');
   if (node->key.isEmpty()) {
     for (const auto &child : node->children) {
-      write_vdf_node(out, child, depth);
+      WriteVdfNode(out, child, depth);
     }
     return;
   }
@@ -193,7 +203,7 @@ static void write_vdf_node(QTextStream &out,
     out << indent << "\"" << escape_str(node->key) << "\"\n";
     out << indent << "{\n";
     for (const auto &child : node->children) {
-      write_vdf_node(out, child, depth + 1);
+      WriteVdfNode(out, child, depth + 1);
     }
     out << indent << "}\n";
   } else {
@@ -202,19 +212,21 @@ static void write_vdf_node(QTextStream &out,
   }
 }
 
-static bool write_vdf(const QSharedPointer<VdfNode> &root,
-                      const QString &filepath) {
+// Serializes the VDF tree structure back to the specified file path.
+bool WriteVdf(const QSharedPointer<VdfNode> &root, const QString &filepath) {
   QFile file(filepath);
   if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
     return false;
   }
   QTextStream out(&file);
-  write_vdf_node(out, root, 0);
+  WriteVdfNode(out, root, 0);
   file.close();
   return true;
 }
 
-static QString get_steam_path() {
+// Auto-detects the Steam installation directory, supporting standard and
+// Flatpak paths.
+QString GetSteamPath() {
   QString home = QDir::homePath();
   QStringList paths = {
       home + "/.steam/steam", home + "/.local/share/Steam",
@@ -228,19 +240,20 @@ static QString get_steam_path() {
   return "";
 }
 
-static QStringList get_library_folders(const QString &steam_path) {
+// Reads Steam's libraryfolders.vdf to find all Steam library paths.
+QStringList GetLibraryFolders(const QString &steam_path) {
   QStringList folders;
   QString vdf_path = steam_path + "/steamapps/libraryfolders.vdf";
-  auto root = parse_vdf(vdf_path);
+  auto root = ParseVdf(vdf_path);
   if (!root) {
     folders.append(steam_path);
     return folders;
   }
-  auto lib_node = root->find_child("libraryfolders");
+  auto lib_node = root->FindChild("libraryfolders");
   if (lib_node) {
     for (const auto &child : lib_node->children) {
       if (child->is_object) {
-        auto path_node = child->find_child("path");
+        auto path_node = child->FindChild("path");
         if (path_node && !path_node->value.isEmpty()) {
           folders.append(path_node->value);
         }
@@ -253,8 +266,9 @@ static QStringList get_library_folders(const QString &steam_path) {
   return folders;
 }
 
-static QMap<QString, QString>
-get_installed_games(const QStringList &library_folders) {
+// Scans appmanifest_*.acf files in the libraries to fetch all installed game
+// AppIDs and names.
+QMap<QString, QString> GetInstalledGames(const QStringList &library_folders) {
   QMap<QString, QString> games;
   for (const auto &folder : library_folders) {
     QDir dir(folder + "/steamapps");
@@ -265,13 +279,13 @@ get_installed_games(const QStringList &library_folders) {
     QStringList files = dir.entryList(filters, QDir::Files);
     for (const auto &filename : files) {
       QString file_path = dir.absoluteFilePath(filename);
-      auto acf_root = parse_vdf(file_path);
+      auto acf_root = ParseVdf(file_path);
       if (!acf_root)
         continue;
-      auto app_state = acf_root->find_child("AppState");
+      auto app_state = acf_root->FindChild("AppState");
       if (app_state) {
-        auto appid_node = app_state->find_child("appid");
-        auto name_node = app_state->find_child("name");
+        auto appid_node = app_state->FindChild("appid");
+        auto name_node = app_state->FindChild("name");
         if (appid_node && name_node && !appid_node->value.isEmpty()) {
           games.insert(appid_node->value, name_node->value);
         }
@@ -281,18 +295,18 @@ get_installed_games(const QStringList &library_folders) {
   return games;
 }
 
-static bool apply_launch_options(const QString &localconfig_path,
-                                 const QMap<QString, QString> &games,
-                                 int action_type) {
-  auto root = parse_vdf(localconfig_path);
+// Modifies the LaunchOptions settings in the user's localconfig.vdf file.
+bool ApplyLaunchOptions(const QString &localconfig_path,
+                        const QMap<QString, QString> &games, int action_type) {
+  auto root = ParseVdf(localconfig_path);
   if (!root)
     return false;
 
-  auto user_store = root->get_or_create_child_object("UserLocalConfigStore");
-  auto software = user_store->get_or_create_child_object("Software");
-  auto valve = software->get_or_create_child_object("Valve");
-  auto steam = valve->get_or_create_child_object("Steam");
-  auto apps = steam->get_or_create_child_object("Apps");
+  auto user_store = root->GetOrCreateChildObject("UserLocalConfigStore");
+  auto software = user_store->GetOrCreateChildObject("Software");
+  auto valve = software->GetOrCreateChildObject("Valve");
+  auto steam = valve->GetOrCreateChildObject("Steam");
+  auto apps = steam->GetOrCreateChildObject("Apps");
 
   auto modify_opts = [](const QString &current_opts, const QString &game_name,
                         int action) -> QString {
@@ -341,8 +355,8 @@ static bool apply_launch_options(const QString &localconfig_path,
     QString appid = it.key();
     QString game_name = it.value();
 
-    auto app_node = apps->get_or_create_child_object(appid);
-    auto launch_node = app_node->find_child("LaunchOptions");
+    auto app_node = apps->GetOrCreateChildObject(appid);
+    auto launch_node = app_node->FindChild("LaunchOptions");
     QString current_opts = launch_node ? launch_node->value : "";
 
     QString new_opts = modify_opts(current_opts, game_name, action_type);
@@ -352,17 +366,21 @@ static bool apply_launch_options(const QString &localconfig_path,
         app_node->children.removeOne(launch_node);
       }
     } else {
-      app_node->set_child_value("LaunchOptions", new_opts);
+      app_node->SetChildValue("LaunchOptions", new_opts);
     }
   }
 
-  return write_vdf(root, localconfig_path);
+  return WriteVdf(root, localconfig_path);
 }
 
+} // namespace
+
+// Dialog window class for configuring and applying the launch options.
 class SteamLaunchOptionsDialog : public QDialog {
   Q_OBJECT
 public:
-  SteamLaunchOptionsDialog(QWidget *parent = nullptr) : QDialog(parent) {
+  explicit SteamLaunchOptionsDialog(QWidget *parent = nullptr)
+      : QDialog(parent) {
     setWindowTitle(obs_module_text("SteamLaunchOptions.Title"));
     setMinimumWidth(500);
 
@@ -372,81 +390,81 @@ public:
         new QLabel(obs_module_text("SteamLaunchOptions.Desc"), this);
     layout->addWidget(desc_label);
 
-    m_group = new QButtonGroup(this);
+    group_ = new QButtonGroup(this);
 
-    m_opt1 = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt1"), this);
-    m_opt2 = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt2"), this);
-    m_opt3 = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt3"), this);
+    opt1_ = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt1"), this);
+    opt2_ = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt2"), this);
+    opt3_ = new QRadioButton(obs_module_text("SteamLaunchOptions.Opt3"), this);
 
-    m_group->addButton(m_opt1, 1);
-    m_group->addButton(m_opt2, 2);
-    m_group->addButton(m_opt3, 0);
+    group_->addButton(opt1_, 1);
+    group_->addButton(opt2_, 2);
+    group_->addButton(opt3_, 0);
 
-    layout->addWidget(m_opt1);
-    layout->addWidget(m_opt2);
-    layout->addWidget(m_opt3);
+    layout->addWidget(opt1_);
+    layout->addWidget(opt2_);
+    layout->addWidget(opt3_);
 
-    m_opt2->setChecked(true);
+    opt2_->setChecked(true);
 
-    m_warning_label = new QLabel(this);
-    m_warning_label->setStyleSheet(
+    warning_label_ = new QLabel(this);
+    warning_label_->setStyleSheet(
         "color: #ff3333; font-weight: bold; margin-top: 10px;");
-    m_warning_label->setWordWrap(true);
-    layout->addWidget(m_warning_label);
+    warning_label_->setWordWrap(true);
+    layout->addWidget(warning_label_);
 
-    update_steam_warning();
+    UpdateSteamWarning();
 
     auto *btn_layout = new QHBoxLayout();
-    m_apply_btn =
+    apply_btn_ =
         new QPushButton(obs_module_text("SteamLaunchOptions.Apply"), this);
     auto *cancel_btn =
         new QPushButton(obs_module_text("SteamLaunchOptions.Cancel"), this);
 
     btn_layout->addStretch();
-    btn_layout->addWidget(m_apply_btn);
+    btn_layout->addWidget(apply_btn_);
     btn_layout->addWidget(cancel_btn);
     layout->addLayout(btn_layout);
 
-    connect(m_apply_btn, &QPushButton::clicked, this,
-            &SteamLaunchOptionsDialog::on_apply);
+    connect(apply_btn_, &QPushButton::clicked, this,
+            &SteamLaunchOptionsDialog::OnApply);
     connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
   }
 
 private:
-  QButtonGroup *m_group;
-  QRadioButton *m_opt1;
-  QRadioButton *m_opt2;
-  QRadioButton *m_opt3;
-  QLabel *m_warning_label;
-  QPushButton *m_apply_btn;
+  QButtonGroup *group_;
+  QRadioButton *opt1_;
+  QRadioButton *opt2_;
+  QRadioButton *opt3_;
+  QLabel *warning_label_;
+  QPushButton *apply_btn_;
 
-  bool is_steam_running() {
+  bool IsSteamRunning() {
     QProcess process;
     process.start("pgrep", QStringList() << "-x" << "steam");
     process.waitForFinished();
     return process.exitCode() == 0;
   }
 
-  void update_steam_warning() {
-    if (is_steam_running()) {
-      m_warning_label->setText(
+  void UpdateSteamWarning() {
+    if (IsSteamRunning()) {
+      warning_label_->setText(
           obs_module_text("SteamLaunchOptions.WarnSteamRunning"));
-      m_warning_label->show();
+      warning_label_->show();
     } else {
-      m_warning_label->hide();
+      warning_label_->hide();
     }
   }
 
-  void on_apply() {
-    QString steam_path = get_steam_path();
+  void OnApply() {
+    QString steam_path = GetSteamPath();
     if (steam_path.isEmpty()) {
       QMessageBox::critical(this, windowTitle(),
                             "Steam installation path not found.");
       return;
     }
 
-    QStringList libs = get_library_folders(steam_path);
-    QMap<QString, QString> games = get_installed_games(libs);
+    QStringList libs = GetLibraryFolders(steam_path);
+    QMap<QString, QString> games = GetInstalledGames(libs);
     if (games.isEmpty()) {
       QMessageBox::warning(
           this, windowTitle(),
@@ -464,7 +482,7 @@ private:
     QStringList user_dirs =
         userdata_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     int success_count = 0;
-    int action_type = m_group->checkedId();
+    int action_type = group_->checkedId();
 
     for (const auto &user_id : user_dirs) {
       bool ok;
@@ -475,7 +493,7 @@ private:
       QString localconfig_path =
           userdata_dir.absoluteFilePath(user_id + "/config/localconfig.vdf");
       if (QFile::exists(localconfig_path)) {
-        if (apply_launch_options(localconfig_path, games, action_type)) {
+        if (ApplyLaunchOptions(localconfig_path, games, action_type)) {
           success_count++;
         }
       }
