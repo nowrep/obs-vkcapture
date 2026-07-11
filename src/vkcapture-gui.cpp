@@ -15,7 +15,6 @@
 #include <QList>
 #include <QMap>
 #include <QMessageBox>
-#include <QProcess>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRegularExpression>
@@ -439,10 +438,30 @@ private:
   QPushButton *apply_btn_;
 
   bool IsSteamRunning() {
-    QProcess process;
-    process.start("pgrep", QStringList() << "-x" << "steam");
-    process.waitForFinished();
-    return process.exitCode() == 0;
+    QDir proc_dir("/proc");
+    if (!proc_dir.exists()) {
+      return false;
+    }
+
+    const QFileInfoList entries =
+        proc_dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo &entry : entries) {
+      bool is_pid = false;
+      entry.fileName().toInt(&is_pid);
+      if (!is_pid) {
+        continue;
+      }
+
+      QFile comm_file(entry.absoluteFilePath() + "/comm");
+      if (comm_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&comm_file);
+        QString comm = in.readLine().trimmed();
+        if (comm == "steam") {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   void UpdateSteamWarning() {
