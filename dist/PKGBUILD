@@ -7,7 +7,7 @@ url='https://github.com/nowrep/obs-vkcapture'
 license=('GPL2')
 arch=('x86_64')
 depends=('vulkan-icd-loader' 'libgl' 'obs-studio>=27')
-makedepends=('git' 'gcc' 'cmake' 'vulkan-headers' 'lib32-gcc-libs' 'lib32-vulkan-icd-loader' 'lib32-libgl')
+makedepends=('git' 'gcc' 'cmake' 'vulkan-headers' 'lib32-gcc-libs' 'lib32-vulkan-icd-loader' 'lib32-libgl' 'qt6-base' 'lld')
 source=("$_pkgbase::git+$url")
 sha512sums=('SKIP')
 
