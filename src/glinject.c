@@ -136,8 +136,13 @@ static bool gl_init_funcs(bool glx)
         x11_f.valid = false;
         void *handle = dlopen("libGLX.so.0", RTLD_LAZY);
         if (!handle) {
-            hlog("Failed to open libGLX.so.0");
-            return false;
+            // some systems embed GLX in libGL.so
+            // if split, then it'd be libGL.so.0 and not match
+            void *handle = dlopen("libGL.so.1", RTLD_LAZY);
+            if (!handle) {
+                hlog("Failed to open libGLX.so.0 or libGL.so.1");
+                return false;
+            }
         }
         GETGLXADDR(GetProcAddress);
         GETGLXADDR(GetProcAddressARB);

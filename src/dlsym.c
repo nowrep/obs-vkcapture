@@ -53,6 +53,15 @@ static bool dl_init_funcs()
     }
 
     if (!dl_f.dlsym) {
+        eh_obj_t musl;
+        int ret = eh_find_obj(&musl, "*ld-musl*");
+        if (ret == 0) {
+            eh_find_sym(&musl, "dlsym", (void**)&dl_f.dlsym);
+            eh_find_sym(&musl, "dlvsym", (void**)&dl_f.dlvsym);        }
+        eh_destroy_obj(&musl);
+    }
+
+    if (!dl_f.dlsym) {
         hlog("Failed to open libdl.so and libc.so");
         return false;
     }
