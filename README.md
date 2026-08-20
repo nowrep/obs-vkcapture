@@ -28,7 +28,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 
 ## Building
 
-If you have [just](https://github.com/casey/just) installed, you can build with `just build`. If not, use the script below.
+If you have [just](https://github.com/casey/just) installed, you can build by running `just`. If not, use the script below.
 
     mkdir -p build && cd build
     cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release ..
