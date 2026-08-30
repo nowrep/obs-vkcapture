@@ -20,6 +20,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs-nix-platform.h>
+#include <obs-frontend-api.h>
+
+void show_steam_launch_options_dialog(void *parent);
 
 #include <poll.h>
 #include <errno.h>
@@ -1080,6 +1083,12 @@ static void *server_thread_run(void *data)
     return NULL;
 }
 
+static void steam_launch_options_callback(void *private_data)
+{
+    UNUSED_PARAMETER(private_data);
+    show_steam_launch_options_dialog(obs_frontend_get_main_window());
+}
+
 bool obs_module_load(void)
 {
     enum obs_nix_platform_type platform = obs_get_nix_platform();
@@ -1106,6 +1115,7 @@ bool obs_module_load(void)
     pthread_setname_np(server.thread, PLUGIN_NAME);
 
     obs_register_source(&vkcapture_input);
+    obs_frontend_add_tools_menu_item(obs_module_text("SteamLaunchOptions"), steam_launch_options_callback, NULL);
     blog(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 
     return true;
