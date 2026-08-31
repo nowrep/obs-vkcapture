@@ -140,3 +140,32 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/obs_vkcapture${LAYER_SUFFIX}.json
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/obs-gamecapture
     src/obs-vkcapture src/obs-glcapture
     DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
+
+# make a deb 
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "obs-vkcapture")
+set(CPACK_PACKAGE_VENDOR "obs-vkcapture Project")
+set(CPACK_PACKAGE_CONTACT "nowrep@gmail.com")
+
+# Use the project version defined above
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}")
+
+# Debian control metadata
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "David Rosca nowrep@gmail.com")
+set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "OBS Vulkan/OpenGL game capture plugin")
+set(CPACK_DEBIAN_PACKAGE_SECTION "video")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "i386")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "i386")
+else()
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+# Needed Run time deps 
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "obs-studio (>= 29), libvulkan1, libgl1, libegl1, libx11-6, libxcb1")
+
+include(CPack)
