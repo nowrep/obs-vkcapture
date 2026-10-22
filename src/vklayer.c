@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#define _GNU_SOURCE
 #include "vklayer.h"
 #include "capture.h"
 #include "utils.h"
@@ -26,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <link.h>
 #include <vulkan/vk_layer.h>
 
 // Based on obs-studio/plugins/win-capture/graphics-hook/vulkan-capture.c
@@ -878,6 +880,46 @@ static inline bool vk_shtex_init_vulkan_tex(struct vk_data *data,
     return true;
 }
 
+static int find_winewayland_cb(struct dl_phdr_info *info, size_t size, void *user)
+{
+    (void)size;
+    (void)user;
+    const char *slash = strrchr(info->dlpi_name, '/');
+    const char *name = slash ? slash + 1 : info->dlpi_name;
+    return !strcmp(name, "winewayland.so");
+}
+
+/* winewayland (Proton-GE) creates HDR swapchains with PASS_THROUGH and sets
+ * the real colorspace on the wl_surface instead: scRGB (FP16) or HDR10 (10-bit).
+ * Restore the original colorspace so OBS treats the capture as HDR.
+ * Other PASS_THROUGH users (eg. mpv) are left untouched. */
+static VkColorSpaceKHR resolve_color_space(struct vk_swap_data *swap)
+{
+    if (swap->color_space != VK_COLOR_SPACE_PASS_THROUGH_EXT) {
+        return swap->color_space;
+    }
+    if (!dl_iterate_phdr(find_winewayland_cb, NULL)) {
+        return swap->color_space;
+    }
+
+    VkColorSpaceKHR color_space = swap->color_space;
+    switch (swap->export_format) {
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+        color_space = VK_COLOR_SPACE_HDR10_ST2084_EXT;
+        break;
+    case VK_FORMAT_R16G16B16A16_SFLOAT:
+        color_space = VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT;
+        break;
+    default:
+        break;
+    }
+    if (color_space != swap->color_space) {
+        hlog("Wine Wayland PASS_THROUGH colorspace, using %d", color_space);
+    }
+    return color_space;
+}
+
 static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
 {
     if (!vk_shtex_init_vulkan_tex(data, swap)) {
@@ -889,7 +931,7 @@ static bool vk_shtex_init(struct vk_data *data, struct vk_swap_data *swap)
     capture_init_shtex(swap->image_extent.width, swap->image_extent.height,
         vk_format_to_drm(swap->export_format),
         swap->dmabuf_strides, swap->dmabuf_offsets, swap->dmabuf_modifier,
-        swap->winid, /*flip*/false, swap->color_space,
+        swap->winid, /*flip*/false, resolve_color_space(swap),
         swap->dmabuf_nfd, swap->dmabuf_fds);
 
     hlog("------------------ vulkan capture started ------------------");
