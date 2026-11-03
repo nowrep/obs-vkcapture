@@ -775,9 +775,8 @@ static bool is_window_modified(obs_properties_t *props, obs_property_t *prop, ob
             continue;
         }
         if (!strcmp(window, client->cdata.exe)) {
-            int length = (int)((floor(log10(client->pid))+2)*sizeof(char));
-            char pidStr[length];
-            snprintf(pidStr, length, "%d", client->pid);
+            char pidStr[16];
+            snprintf(pidStr, sizeof(pidStr), "%d", client->pid);
             obs_property_list_add_int(pids,  pidStr, client->pid);
             if (pid && pid == client->pid) {
                 pid_found = true;
@@ -787,9 +786,8 @@ static bool is_window_modified(obs_properties_t *props, obs_property_t *prop, ob
     pthread_mutex_unlock(&server.mutex);
 
     if (pid && !pid_found) {
-        int length = (int)((floor(log10(pid))+2)*sizeof(char));
-        char pidStr[length];
-        snprintf(pidStr, length, "%d", pid);
+        char pidStr[16];
+        snprintf(pidStr, sizeof(pidStr), "%d", pid);
         obs_property_list_add_int(pids, pidStr, pid);
     }
 
@@ -839,9 +837,8 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
                     continue;
                 }
 
-                int length = (int)((floor(log10(client->pid))+2)*sizeof(char));
-                char pidStr[length];
-                snprintf(pidStr, length, "%d", client->pid);
+                char pidStr[16];
+                snprintf(pidStr, sizeof(pidStr), "%d", client->pid);
                 obs_property_list_add_int(q,  pidStr, client->pid);
                 if (ctx->pid && ctx->pid == client->pid) {
                     pid_found = true;
@@ -853,9 +850,8 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
             obs_property_list_add_string(p, ctx->window, ctx->window);
         }
         if (ctx->pid && !pid_found) {
-            int length = (int)((floor(log10(ctx->pid))+2)*sizeof(char));
-            char pidStr[length];
-            snprintf(pidStr, length, "%d", ctx->pid);
+            char pidStr[16];
+            snprintf(pidStr, sizeof(pidStr), "%d", ctx->pid);
             obs_property_list_add_int(q, pidStr, ctx->pid);
         }
     }
