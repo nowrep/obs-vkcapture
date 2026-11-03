@@ -78,6 +78,7 @@ typedef struct {
     bool unresponsive;
     struct capture_client_data cdata;
     struct capture_texture_data tdata;
+    pid_t pid;
 } vkcapture_client_t;
 
 static struct {
@@ -103,6 +104,7 @@ typedef struct {
     bool window_match;
     bool window_exclude;
     const char *window;
+    pid_t pid;
 
     int buf_id;
     int client_id;
@@ -341,6 +343,8 @@ static void vkcapture_source_update(void *data, obs_data_t *settings)
     if (!strlen(ctx->window)) {
         ctx->window = NULL;
     }
+
+    ctx->pid = obs_data_get_int(settings, "pid");
 }
 
 static void *vkcapture_source_create(obs_data_t *settings, obs_source_t *source)
@@ -372,8 +376,15 @@ static vkcapture_client_t *find_matching_client(vkcapture_source_t *ctx)
             vkcapture_client_t *c = server.clients.array + i - 1;
             bool match = !strcmp(c->cdata.exe, ctx->window);
             if ((ctx->window_match && match) || (ctx->window_exclude && !match)) {
-                client = c;
-                break;
+                if (ctx->pid) {
+                    if (ctx->pid == c->pid) {
+                        client = c;
+                        break;
+                    }
+                } else {
+                    client = c;
+                    break;
+                }
             }
         }
     } else if (server.clients.num) {
@@ -743,6 +754,46 @@ static void vkcapture_source_get_defaults(obs_data_t *defaults)
     obs_data_set_default_bool(defaults, "allow_transparency", false);
 }
 
+static bool is_window_modified(obs_properties_t *props, obs_property_t *prop, obs_data_t *settings)
+{
+    UNUSED_PARAMETER(prop);
+
+    const char *window = obs_data_get_string(settings, "window");
+    pid_t pid = obs_data_get_int(settings, "pid");
+    obs_property_t *pids = obs_properties_get(props, "pid");
+    obs_property_list_clear(pids);
+    obs_property_list_add_int(pids, obs_module_text("MatchAnyPID"), 0);
+    if (strlen(window) == 0) {
+        return true;
+    }
+
+    bool pid_found = false;
+    pthread_mutex_lock(&server.mutex);
+    for (size_t i = 0; i < server.clients.num; i++) {
+        vkcapture_client_t *client = server.clients.array + i;
+        if (client->pid == 0) {
+            continue;
+        }
+        if (!strcmp(window, client->cdata.exe)) {
+            char pidStr[16];
+            snprintf(pidStr, sizeof(pidStr), "%d", client->pid);
+            obs_property_list_add_int(pids,  pidStr, client->pid);
+            if (pid && pid == client->pid) {
+                pid_found = true;
+            }
+        }
+    }
+    pthread_mutex_unlock(&server.mutex);
+
+    if (pid && !pid_found) {
+        char pidStr[16];
+        snprintf(pidStr, sizeof(pidStr), "%d", pid);
+        obs_property_list_add_int(pids, pidStr, pid);
+    }
+
+    return true;
+}
+
 static obs_properties_t *vkcapture_source_get_properties(void *data)
 {
     vkcapture_source_t *ctx = data;
@@ -753,10 +804,18 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
             obs_module_text("CaptureWindow"),
             OBS_COMBO_TYPE_LIST,
             OBS_COMBO_FORMAT_STRING);
+    obs_property_set_modified_callback(p, is_window_modified);
     obs_property_list_add_string(p, obs_module_text("CaptureAnyWindow"), "");
+
+    obs_property_t *q = obs_properties_add_list(props, "pid",
+            obs_module_text("MatchPID"),
+            OBS_COMBO_TYPE_LIST,
+            OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(q, obs_module_text("MatchAnyPID"), 0);
 
     if (ctx) {
         bool window_found = false;
+        bool pid_found = false;
         pthread_mutex_lock(&server.mutex);
         for (size_t i = 0; i < server.clients.num; i++) {
             vkcapture_client_t *client = server.clients.array + i;
@@ -774,11 +833,26 @@ static obs_properties_t *vkcapture_source_get_properties(void *data)
             obs_property_list_add_string(p, client->cdata.exe, client->cdata.exe);
             if (ctx->window && !strcmp(client->cdata.exe, ctx->window)) {
                 window_found = true;
+                if (client->pid == 0) {
+                    continue;
+                }
+
+                char pidStr[16];
+                snprintf(pidStr, sizeof(pidStr), "%d", client->pid);
+                obs_property_list_add_int(q,  pidStr, client->pid);
+                if (ctx->pid && ctx->pid == client->pid) {
+                    pid_found = true;
+                }
             }
         }
         pthread_mutex_unlock(&server.mutex);
         if (ctx->window && !window_found) {
             obs_property_list_add_string(p, ctx->window, ctx->window);
+        }
+        if (ctx->pid && !pid_found) {
+            char pidStr[16];
+            snprintf(pidStr, sizeof(pidStr), "%d", ctx->pid);
+            obs_property_list_add_int(q, pidStr, ctx->pid);
         }
     }
 
@@ -964,15 +1038,16 @@ static void *server_thread_run(void *data)
                 memset(&client.buf_fds, -1, sizeof(client.buf_fds));
                 client.id = ++clientid;
                 client.sockfd = clientfd;
-                pthread_mutex_lock(&server.mutex);
-                da_push_back(server.clients, &client);
-                pthread_mutex_unlock(&server.mutex);
-                server_add_fd(client.sockfd, POLLIN);
                 struct ucred cred = {0};
                 socklen_t cred_len = sizeof(cred);
                 if (getsockopt(client.sockfd, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) != 0) {
                     blog(LOG_WARNING, "Failed to get socket credentials: %s", strerror(errno));
                 }
+                client.pid = cred.pid;
+                pthread_mutex_lock(&server.mutex);
+                da_push_back(server.clients, &client);
+                pthread_mutex_unlock(&server.mutex);
+                server_add_fd(client.sockfd, POLLIN);
                 blog(LOG_INFO, "Client %d connected (pid=%d)", client.id, cred.pid);
             } else {
                 if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {

@@ -17,6 +17,7 @@ For capturing games outside Flatpak runtime, you need native build regardless of
 ## Dependencies
 
 * cmake
+* pkg-config
 * libobs
 * libvulkan
 * libgl
